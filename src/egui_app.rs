@@ -15,7 +15,7 @@ impl EguiApp {
 
     pub fn ui(&mut self, ctx: &Context) {
         CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Clock for Smithay - EGUI Demo");
+            ui.heading("Egui WGPU / Smithay example");
             
             ui.separator();
             

@@ -38,6 +38,7 @@ use wayland_client::{
     protocol::{wl_output, wl_seat, wl_surface},
     Connection, Proxy, QueueHandle,
 };
+use log::info;
 
 fn main() {
     env_logger::init();
@@ -124,7 +125,7 @@ fn main() {
         event_queue.blocking_dispatch(&mut main_state).unwrap();
 
         if main_state.exit {
-            println!("exiting example");
+            info!("exiting example");
             break;
         }
     }
@@ -159,17 +160,17 @@ struct MainState {
 
 impl MainState {
     fn render(&mut self, conn: &Connection, qh: &QueueHandle<Self>) {
-        println!("[MAIN] Render called");
+        info!("[MAIN] Render called");
         
         if self.egui_renderer.is_none() {
-            println!("[MAIN] Skipping render - EGUI renderer not initialized yet");
+            info!("[MAIN] Skipping render - EGUI renderer not initialized yet");
             return;
         }
 
         let surface_texture = match self.surface.get_current_texture() {
             Ok(texture) => texture,
             Err(e) => {
-                println!("[MAIN] Failed to acquire swapchain texture: {:?}", e);
+                info!("[MAIN] Failed to acquire swapchain texture: {:?}", e);
                 return;
             }
         };
@@ -241,7 +242,7 @@ impl MainState {
         
         // Only request next frame if EGUI needs repaint (animations, etc.)
         if needs_repaint {
-            println!("[MAIN] EGUI has events, scheduling next frame");
+            info!("[MAIN] EGUI has events, scheduling next frame");
             self.window.wl_surface().frame(qh, self.window.wl_surface().clone());
             self.window.wl_surface().commit();
         }
@@ -256,7 +257,7 @@ impl CompositorHandler for MainState {
         _surface: &wl_surface::WlSurface,
         new_factor: i32,
     ) {
-        println!("[MAIN] Scale factor changed to {}", new_factor);
+        info!("[MAIN] Scale factor changed to {}", new_factor);
         self.scale_factor = new_factor;
         // Request a redraw with the new scale factor
         self.window.wl_surface().frame(qh, self.window.wl_surface().clone());
@@ -280,7 +281,7 @@ impl CompositorHandler for MainState {
         _surface: &wl_surface::WlSurface,
         _time: u32,
     ) {
-        println!("[MAIN] Frame callback");
+        info!("[MAIN] Frame callback");
         self.render(conn, qh);
     }
 
@@ -348,12 +349,12 @@ impl WindowHandler for MainState {
         configure: WindowConfigure,
         _serial: u32,
     ) {
-        println!("[MAIN] Configure called");
+        info!("[MAIN] Configure called");
         let (new_width, new_height) = configure.new_size;
         self.width = new_width.map_or(256, |v| v.get());
         self.height = new_height.map_or(256, |v| v.get());
         self.input_state.set_screen_size(self.width, self.height);
-        println!("[MAIN] Window size: {}x{}", self.width, self.height);
+        info!("[MAIN] Window size: {}x{}", self.width, self.height);
 
         let adapter = &self.adapter;
         let surface = &self.surface;
@@ -400,12 +401,12 @@ impl PointerHandler for MainState {
         _pointer: &wayland_client::protocol::wl_pointer::WlPointer,
         events: &[PointerEvent],
     ) {
-        println!("[MAIN] Pointer frame with {} events", events.len());
+        info!("[MAIN] Pointer frame with {} events", events.len());
         for event in events {
             self.input_state.handle_pointer_event(event);
         }
         // Request a redraw after input
-        println!("[MAIN] Requesting frame after pointer input");
+        info!("[MAIN] Requesting frame after pointer input");
         self.window.wl_surface().frame(&_qh, self.window.wl_surface().clone());
         self.window.wl_surface().commit();
     }
@@ -422,7 +423,7 @@ impl KeyboardHandler for MainState {
         _raw: &[u32],
         _keysyms: &[smithay_client_toolkit::seat::keyboard::Keysym],
     ) {
-        println!("[MAIN] Keyboard focus gained");
+        info!("[MAIN] Keyboard focus gained");
         // Keyboard focus gained
     }
 
@@ -434,7 +435,7 @@ impl KeyboardHandler for MainState {
         _surface: &wl_surface::WlSurface,
         _serial: u32,
     ) {
-        println!("[MAIN] Keyboard focus lost");
+        info!("[MAIN] Keyboard focus lost");
         // Keyboard focus lost
     }
 
@@ -446,13 +447,13 @@ impl KeyboardHandler for MainState {
         _serial: u32,
         event: KeyEvent,
     ) {
-        println!("[MAIN] Key pressed");
+        info!("[MAIN] Key pressed");
 
         
         self.input_state.handle_keyboard_event(&event, true, false);
         
         // Request a redraw after input
-        println!("[MAIN] Requesting frame after key press");
+        info!("[MAIN] Requesting frame after key press");
         self.window.wl_surface().frame(&_qh, self.window.wl_surface().clone());
         self.window.wl_surface().commit();
     }
@@ -510,12 +511,12 @@ impl SeatHandler for MainState {
         seat: wl_seat::WlSeat,
         capability: Capability,
     ) {
-        println!("[MAIN] New seat capability: {:?}", capability);
+        info!("[MAIN] New seat capability: {:?}", capability);
         if capability == Capability::Keyboard && self.seat_state.get_keyboard(qh, &seat, None).is_err() {
-            println!("[MAIN] Failed to get keyboard");
+            info!("[MAIN] Failed to get keyboard");
         }
         if capability == Capability::Pointer && self.themed_pointer.is_none() {
-            println!("[MAIN] Creating themed pointer");
+            info!("[MAIN] Creating themed pointer");
             let surface = self.window.wl_surface().clone();
             match self.seat_state.get_pointer_with_theme(
                 qh,
@@ -526,10 +527,10 @@ impl SeatHandler for MainState {
             ) {
                 Ok(themed_pointer) => {
                     self.themed_pointer = Some(themed_pointer);
-                    println!("[MAIN] Themed pointer created successfully");
+                    info!("[MAIN] Themed pointer created successfully");
                 }
                 Err(e) => {
-                    println!("[MAIN] Failed to create themed pointer: {:?}", e);
+                    info!("[MAIN] Failed to create themed pointer: {:?}", e);
                 }
             }
         }

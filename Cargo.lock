@@ -367,6 +367,7 @@ dependencies = [
  "egui",
  "egui-wgpu",
  "env_logger",
+ "log",
  "pollster",
  "raw-window-handle",
  "smithay-client-toolkit",

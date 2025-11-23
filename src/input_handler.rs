@@ -3,7 +3,7 @@ use smithay_client_toolkit::seat::keyboard::{KeyEvent, Keysym, Modifiers as Wayl
 use smithay_client_toolkit::seat::pointer::{PointerEvent, PointerEventKind};
 use smithay_clipboard::Clipboard;
 use std::time::Instant;
-use log::info;
+use log::trace;
 
 /// Handles input events from Wayland and converts them to EGUI RawInput
 pub struct InputState {
@@ -39,27 +39,27 @@ impl InputState {
     }
 
     pub fn handle_pointer_event(&mut self, event: &PointerEvent) {
-        info!("[INPUT] Pointer event: {:?}", event.kind);
+        trace!("[INPUT] Pointer event: {:?}", event.kind);
         match &event.kind {
             PointerEventKind::Enter { .. } => {
-                info!("[INPUT] Pointer entered surface");
+                trace!("[INPUT] Pointer entered surface");
                 // Pointer entered the surface
             }
             PointerEventKind::Leave { .. } => {
-                info!("[INPUT] Pointer left surface");
+                trace!("[INPUT] Pointer left surface");
                 // Pointer left the surface
                 self.events.push(Event::PointerGone);
             }
             PointerEventKind::Motion { .. } => {
                 let (x, y) = event.position;
                 self.pointer_pos = Pos2::new(x as f32, y as f32);
-                info!("[INPUT] Pointer moved to: ({}, {})", x, y);
+                trace!("[INPUT] Pointer moved to: ({}, {})", x, y);
                 self.events.push(Event::PointerMoved(self.pointer_pos));
             }
             PointerEventKind::Press { button, .. } => {
-                info!("[INPUT] Pointer button pressed: {}", button);
+                trace!("[INPUT] Pointer button pressed: {}", button);
                 if let Some(egui_button) = wayland_button_to_egui(*button) {
-                    info!("[INPUT] Mapped to EGUI button: {:?}", egui_button);
+                    trace!("[INPUT] Mapped to EGUI button: {:?}", egui_button);
                     self.events.push(Event::PointerButton {
                         pos: self.pointer_pos,
                         button: egui_button,
@@ -69,7 +69,7 @@ impl InputState {
                 }
             }
             PointerEventKind::Release { button, .. } => {
-                info!("[INPUT] Pointer button released: {}", button);
+                trace!("[INPUT] Pointer button released: {}", button);
                 if let Some(egui_button) = wayland_button_to_egui(*button) {
                     self.events.push(Event::PointerButton {
                         pos: self.pointer_pos,
@@ -102,7 +102,7 @@ impl InputState {
     }
 
     pub fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, is_repeat: bool) {
-        info!("[INPUT] Keyboard event - keysym: {:?}, raw_code: {}, pressed: {}, repeat: {}, utf8: {:?}", 
+        trace!("[INPUT] Keyboard event - keysym: {:?}, raw_code: {}, pressed: {}, repeat: {}, utf8: {:?}", 
                  event.keysym.raw(), event.raw_code, pressed, is_repeat, event.utf8);
         
         // Check for clipboard operations BEFORE general key handling
@@ -121,7 +121,7 @@ impl InputState {
         }
 
         if let Some(key) = keysym_to_egui_key(event.keysym) {
-            info!("[INPUT] Mapped to EGUI key: {:?}, repeat: {}", key, is_repeat);
+            trace!("[INPUT] Mapped to EGUI key: {:?}, repeat: {}", key, is_repeat);
             // Note: Egui expects repeats to have pressed=true
             self.events.push(Event::Key {
                 key,
@@ -134,13 +134,13 @@ impl InputState {
                 let text = event.utf8.clone().or(self.last_key_utf8.clone());
                 if let Some(text) = text {
                     if !text.chars().any(|c| c.is_control()) {
-                        info!("[INPUT] Text input: '{}'", text);
+                        trace!("[INPUT] Text input: '{}'", text);
                         self.events.push(Event::Text(text.clone()));
                     }
                 }
             }
         } else {
-            info!("[INPUT] No EGUI key mapping for keysym: {:?}", event.keysym.raw());
+            trace!("[INPUT] No EGUI key mapping for keysym: {:?}", event.keysym.raw());
         }
 
         if event.utf8.is_some() {
@@ -149,7 +149,7 @@ impl InputState {
     }
 
     pub fn update_modifiers(&mut self, wayland_mods: &WaylandModifiers) {
-        info!("[INPUT] Modifiers updated - ctrl: {}, shift: {}, alt: {}", 
+        trace!("[INPUT] Modifiers updated - ctrl: {}, shift: {}, alt: {}", 
                  wayland_mods.ctrl, wayland_mods.shift, wayland_mods.alt);
         self.modifiers = Modifiers {
             alt: wayland_mods.alt,
@@ -167,9 +167,9 @@ impl InputState {
 
     pub fn take_raw_input(&mut self) -> RawInput {
         let events = std::mem::take(&mut self.events);
-        info!("[INPUT] Taking raw input with {} events", events.len());
+        trace!("[INPUT] Taking raw input with {} events", events.len());
         if !events.is_empty() {
-            info!("[INPUT] Events: {:?}", events);
+            trace!("[INPUT] Events: {:?}", events);
         }
         
         RawInput {
@@ -192,15 +192,15 @@ impl InputState {
         match output {
             egui::OutputCommand::CopyText(text) => {
                 self.clipboard.store(text.clone());
-                info!("[INPUT] Copied text to clipboard: {:?}", text);
+                trace!("[INPUT] Copied text to clipboard: {:?}", text);
             },
             egui::OutputCommand::CopyImage(_image) => {
                 // Handle image copy if needed
-                info!("[INPUT] CopyImage command received (not implemented)");
+                trace!("[INPUT] CopyImage command received (not implemented)");
                 // TODO: Implement image copying to clipboard if required
             },
             egui::OutputCommand::OpenUrl(url) => {
-                info!("[INPUT] OpenUrl command received: {}", url.url);
+                trace!("[INPUT] OpenUrl command received: {}", url.url);
             },
         }
     }

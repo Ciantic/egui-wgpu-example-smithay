@@ -1,14 +1,8 @@
 use egui::{Event, Key, Modifiers, PointerButton, Pos2, RawInput};
 use smithay_client_toolkit::seat::keyboard::{KeyEvent, Keysym, Modifiers as WaylandModifiers};
 use smithay_client_toolkit::seat::pointer::{PointerEvent, PointerEventKind};
+use smithay_clipboard::Clipboard;
 use std::time::Instant;
-
-#[derive(Debug, Clone)]
-pub enum ClipboardOperation {
-    Copy,
-    Cut,
-    PasteAsText(String),
-}
 
 /// Handles input events from Wayland and converts them to EGUI RawInput
 pub struct InputState {
@@ -19,10 +13,11 @@ pub struct InputState {
     screen_height: u32,
     start_time: Instant,
     pressed_keys: std::collections::HashSet<u32>,
+    clipboard: Clipboard,
 }
 
 impl InputState {
-    pub fn new() -> Self {
+    pub fn new(clipboard: Clipboard) -> Self {
         Self {
             modifiers: Modifiers::default(),
             pointer_pos: Pos2::ZERO,
@@ -31,6 +26,7 @@ impl InputState {
             screen_height: 256,
             start_time: Instant::now(),
             pressed_keys: std::collections::HashSet::new(),
+            clipboard,
         }
     }
 
@@ -102,7 +98,7 @@ impl InputState {
         }
     }
 
-    pub fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, clipboard_op: Option<ClipboardOperation>) {
+    pub fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool) {
         println!("[INPUT] Keyboard event - keysym: {:?}, raw_code: {}, pressed: {}, utf8: {:?}", 
                  event.keysym.raw(), event.raw_code, pressed, event.utf8);
         
@@ -115,45 +111,17 @@ impl InputState {
         };
 
         // Check for clipboard operations BEFORE general key handling
-        if pressed && !is_repeat {
-            // First check if we have an external clipboard operation (e.g., paste with loaded text)
-            if let Some(op) = clipboard_op {
-                match op {
-                    ClipboardOperation::Copy => {
-                        self.events.push(Event::Copy);
-                        println!("[INPUT] Added Copy event");
-                        return;  // Don't process as regular key
-                    }
-                    ClipboardOperation::Cut => {
-                        self.events.push(Event::Cut);
-                        println!("[INPUT] Added Cut event");
-                        return;  // Don't process as regular key
-                    }
-                    ClipboardOperation::PasteAsText(text) => {
-                        self.events.push(Event::Paste(text));
-                        println!("[INPUT] Added Paste event");
-                        return;  // Don't process as regular key
-                    }
-                }
-            }
-            
-            // Otherwise, check for copy/cut shortcuts
-            if let Some(op) = check_clipboard_shortcut(event.keysym, &self.modifiers) {
-                match op {
-                    ClipboardOperation::Copy => {
-                        self.events.push(Event::Copy);
-                        println!("[INPUT] Added Copy event");
-                        return;  // Don't process as regular key
-                    }
-                    ClipboardOperation::Cut => {
-                        self.events.push(Event::Cut);
-                        println!("[INPUT] Added Cut event");
-                        return;  // Don't process as regular key
-                    }
-                    ClipboardOperation::PasteAsText(_) => {
-                        // This shouldn't happen from check_clipboard_shortcut
-                    }
-                }
+        if pressed && !is_repeat && self.modifiers.ctrl {
+            // XKB key constants
+            const XKB_KEY_c: u32 = 0x0063;
+            const XKB_KEY_x: u32 = 0x0078;
+            const XKB_KEY_v: u32 = 0x0076;
+
+            match event.keysym.raw() {
+                XKB_KEY_c => self.events.push(Event::Copy),
+                XKB_KEY_x => self.events.push(Event::Cut),
+                XKB_KEY_v => self.events.push(Event::Paste(self.clipboard.load().unwrap_or_default())),
+                _ => (),
             }
         }
 
@@ -221,11 +189,25 @@ impl InputState {
             ..Default::default()
         }
     }
-}
 
-impl Default for InputState {
-    fn default() -> Self {
-        Self::new()
+    pub fn handle_output_command(&mut self, output: &egui::OutputCommand) {
+        match output {
+            egui::OutputCommand::CopyText(text) => {
+                self.clipboard.store(text.clone());
+                println!("[INPUT] Copied text to clipboard: {:?}", text);
+            },
+            egui::OutputCommand::CopyImage(image) => {
+                // Handle image copy if needed
+                println!("[INPUT] CopyImage command received (not implemented)");
+                // TODO: Implement image copying to clipboard if required
+            },
+            egui::OutputCommand::OpenUrl(url) => {
+                println!("[INPUT] OpenUrl command received: {}", url.url);
+            },
+            _ => {
+
+            }
+        }
     }
 }
 
@@ -235,22 +217,6 @@ fn wayland_button_to_egui(button: u32) -> Option<PointerButton> {
         0x110 => Some(PointerButton::Primary),   // BTN_LEFT
         0x111 => Some(PointerButton::Secondary), // BTN_RIGHT
         0x112 => Some(PointerButton::Middle),    // BTN_MIDDLE
-        _ => None,
-    }
-}
-
-fn check_clipboard_shortcut(keysym: Keysym, modifiers: &Modifiers) -> Option<ClipboardOperation> {
-    if !modifiers.ctrl {
-        return None;
-    }
-
-    // XKB key constants
-    const XKB_KEY_c: u32 = 0x0063;
-    const XKB_KEY_x: u32 = 0x0078;
-
-    match keysym.raw() {
-        XKB_KEY_c => Some(ClipboardOperation::Copy),
-        XKB_KEY_x => Some(ClipboardOperation::Cut),
         _ => None,
     }
 }

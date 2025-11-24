@@ -93,6 +93,8 @@ fn main() {
     }))
     .expect("Failed to find suitable adapter");
 
+    log::info!("Selected backend: {:?}", adapter.get_info().backend);
+
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         memory_hints: wgpu::MemoryHints::MemoryUsage,
         ..Default::default()

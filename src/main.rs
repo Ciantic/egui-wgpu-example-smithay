@@ -32,6 +32,7 @@ use smithay_client_toolkit::{
     },
     shm::{Shm, ShmHandler},
 };
+use wgpu::DeviceDescriptor;
 use std::ptr::NonNull;
 use wayland_client::{
     globals::registry_queue_init,
@@ -92,7 +93,10 @@ fn main() {
     }))
     .expect("Failed to find suitable adapter");
 
-    let (device, queue) = pollster::block_on(adapter.request_device(&Default::default()))
+    let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
+        memory_hints: wgpu::MemoryHints::MemoryUsage,
+        ..Default::default()
+    }))
         .expect("Failed to request device");
 
     // Initialize clipboard

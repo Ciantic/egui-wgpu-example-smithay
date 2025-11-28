@@ -41,6 +41,33 @@ use wayland_client::{
 };
 use log::trace;
 
+// Small helper used to fetch outputs early on (so we can pass one to the
+// layer-shell when creating the layer surface).
+struct Probe {
+    registry_state: RegistryState,
+    output_state: OutputState,
+}
+
+impl OutputHandler for Probe {
+    fn output_state(&mut self) -> &mut OutputState {
+        &mut self.output_state
+    }
+
+    fn new_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _output: wl_output::WlOutput) {}
+    fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _output: wl_output::WlOutput) {}
+    fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, _output: wl_output::WlOutput) {}
+}
+
+delegate_output!(Probe);
+delegate_registry!(Probe);
+
+impl ProvidesRegistryState for Probe {
+    fn registry(&mut self) -> &mut RegistryState {
+        &mut self.registry_state
+    }
+    registry_handlers![OutputState];
+}
+
 fn main() {
     env_logger::init();
 
@@ -53,15 +80,28 @@ fn main() {
         CompositorState::bind(&globals, &qh).expect("wl_compositor not available");
     let layer_shell_state = LayerShell::bind(&globals, &qh).expect("layer shell not available");
     let shm_state = Shm::bind(&globals, &qh).expect("wl_shm not available");
+    // Probe outputs on a separate queue so we don't mix dispatch state types.
+    let (probe_globals, mut probe_event_queue) = registry_queue_init(&conn).unwrap();
+    let probe_qh = probe_event_queue.handle();
+
+    let mut probe = Probe {
+        registry_state: RegistryState::new(&probe_globals),
+        output_state: OutputState::new(&probe_globals, &probe_qh),
+    };
+    // Ensure output_state is populated
+    probe_event_queue.roundtrip(&mut probe).unwrap();
+
+    // First monitor
+    let chosen_output = probe.output_state.outputs().nth(0);
 
     let surface = compositor_state.create_surface(&qh);
-    // Create the layer surface for adapter selection
+    // Create the layer surface for adapter selection, bind to the first output
     let layer_surface = layer_shell_state.create_layer_surface(
         &qh,
         surface,
         Layer::Top,
         Some("clock-for-smithay"),
-        None,
+        chosen_output.as_ref(),
     );
     layer_surface.set_anchor(Anchor::BOTTOM);
     layer_surface.set_keyboard_interactivity(KeyboardInteractivity::OnDemand);

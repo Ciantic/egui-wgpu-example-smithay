@@ -148,10 +148,11 @@ impl CompositorHandler for Application {
         trace!("[MAIN] Frame callback");
         // self.render(conn, qh);
         // if needs_repaint {
-        trace!("[MAIN] EGUI has events, scheduling next frame");
-        _surface.damage_buffer(0, 0, 256, 256);
-        _surface.frame(qh, _surface.clone());
-        _surface.commit();
+
+        // This would render in loop:
+        // _surface.damage_buffer(0, 0, 256, 256);
+        // _surface.frame(qh, _surface.clone());
+        // _surface.commit();
         // }
     }
 
@@ -274,6 +275,7 @@ impl LayerShellHandler for Application {
 impl WindowHandler for Application {
     fn request_close(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &Window) {
         // No-op for this simple helper container
+        trace!("[COMMON] XDG window close requested");
     }
 
     fn configure(

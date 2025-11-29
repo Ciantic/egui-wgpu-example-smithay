@@ -1,29 +1,117 @@
 use log::trace;
-use smithay_client_toolkit::{compositor::CompositorHandler, delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, output::{OutputHandler, OutputState}, registry::{ProvidesRegistryState, RegistryState}, registry_handlers, seat::{Capability, SeatHandler, SeatState, keyboard::{KeyEvent, KeyboardHandler}, pointer::{PointerEvent, PointerHandler, ThemeSpec, ThemedPointer}}, shell::{wlr_layer::{LayerShellHandler, LayerSurface, LayerSurfaceConfigure}, xdg::window::Window}, shm::{Shm, ShmHandler}};
-use wayland_client::{Connection, QueueHandle, protocol::{wl_output, wl_seat, wl_surface::WlSurface}};
+use smithay_client_toolkit::{compositor::CompositorHandler, delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_xdg_shell, delegate_xdg_window, output::{OutputHandler, OutputState}, registry::{ProvidesRegistryState, RegistryState}, registry_handlers, seat::{Capability, SeatHandler, SeatState, keyboard::{KeyEvent, KeyboardHandler}, pointer::{PointerEvent, PointerHandler, ThemedPointer}}, shell::{WaylandSurface, wlr_layer::{LayerShellHandler, LayerSurface, LayerSurfaceConfigure}, xdg::window::{Window, WindowHandler}}, shm::{Shm, ShmHandler, slot::{Buffer, SlotPool}}};
+use wayland_client::{Connection, QueueHandle, Proxy, protocol::{wl_output, wl_seat, wl_shm, wl_surface::WlSurface}};
 
 use crate::InputState;
 
-enum WindowKind {
+pub enum WindowKind {
     LayerSurface(LayerSurface),
-    Window(Window)
+    Window(Window),
 }
 
-struct WaylandWindow {
-    width: u32,
-    height: u32,
-    scale_factor: i32,
-    themed_pointer: Option<ThemedPointer>,
-    kind: WindowKind,
+pub struct WaylandWindow {
+    pub width: u32,
+    pub height: u32,
+    pub scale_factor: i32,
+    pub themed_pointer: Option<ThemedPointer>,
+    pub kind: WindowKind,
+    pub buffer: Option<Buffer>,
 }
 
-struct Application {
-    registry_state: RegistryState,
-    seat_state: SeatState,
-    output_state: OutputState,
-    shm_state: Shm,
-    windows: Vec<WaylandWindow>,
-    input_state: InputState,
+pub struct Application {
+    pub registry_state: RegistryState,
+    pub seat_state: SeatState,
+    pub output_state: OutputState,
+    pub shm_state: Shm,
+    pub windows: Vec<WaylandWindow>,
+    pub input_state: InputState,
+    // Pool used to create shm buffers for simple software presentation in examples
+    pub pool: Option<SlotPool>,
+}
+
+impl Application {
+    /// Create a new Application container from the provided globals state pieces.
+    pub fn new(registry_state: RegistryState, seat_state: SeatState, output_state: OutputState, shm_state: Shm, input_state: InputState) -> Self {
+        Self {
+            registry_state,
+            seat_state,
+            output_state,
+            shm_state,
+            windows: Vec::new(),
+            input_state,
+            pool: None,
+        }
+    }
+
+    /// Create a simple layer surface and track it in `self.windows`.
+    pub fn create_layer_surface(&mut self, compositor_state: &smithay_client_toolkit::compositor::CompositorState, layer_shell: &smithay_client_toolkit::shell::wlr_layer::LayerShell, qh: &QueueHandle<Self>, name: &str, chosen_output: Option<&wl_output::WlOutput>) {
+        let surface = compositor_state.create_surface(qh);
+        let layer_surface = layer_shell.create_layer_surface(
+            qh,
+            surface,
+            smithay_client_toolkit::shell::wlr_layer::Layer::Top,
+            Some(name),
+            chosen_output,
+        );
+        // Make the layer visible and interactive by anchoring and enabling keyboard interactivity
+        layer_surface.set_anchor(smithay_client_toolkit::shell::wlr_layer::Anchor::BOTTOM);
+        layer_surface.set_keyboard_interactivity(smithay_client_toolkit::shell::wlr_layer::KeyboardInteractivity::OnDemand);
+        layer_surface.set_size(256, 256);
+        layer_surface.commit();
+
+        trace!("[COMMON] Created layer surface '{}'", name);
+
+        let win = WaylandWindow {
+            width: 256,
+            height: 256,
+            scale_factor: 1,
+            themed_pointer: None,
+            kind: WindowKind::LayerSurface(layer_surface),
+            buffer: None,
+        };
+        self.windows.push(win);
+    }
+
+    /// Create a simple xdg window and track it in `self.windows`.
+    pub fn create_xdg_window(&mut self, compositor_state: &smithay_client_toolkit::compositor::CompositorState, xdg_shell: &smithay_client_toolkit::shell::xdg::XdgShell, qh: &QueueHandle<Self>, title: &str) {
+        let surface = compositor_state.create_surface(qh);
+        let window = xdg_shell.create_window(surface, smithay_client_toolkit::shell::xdg::window::WindowDecorations::ServerDefault, qh);
+        window.set_title(title);
+        window.set_app_id("io.github.smithay.client-toolkit.EguiExample");
+        window.set_min_size(Some((256, 256)));
+        window.commit();
+
+        let win = WaylandWindow {
+            width: 256,
+            height: 256,
+            scale_factor: 1,
+            themed_pointer: None,
+            kind: WindowKind::Window(window),
+            buffer: None,
+        };
+        self.windows.push(win);
+    }
+
+    /// List textual descriptions of tracked windows.
+    pub fn list_windows(&self) -> Vec<String> {
+        self.windows.iter().enumerate().map(|(i,w)| {
+            match &w.kind {
+                WindowKind::LayerSurface(_) => format!("{}: LayerSurface ({}x{})", i, w.width, w.height),
+                WindowKind::Window(_) => format!("{}: XDG Window ({}x{})", i, w.width, w.height),
+            }
+        }).collect()
+    }
+
+    /// Close and remove the window at index, if any.
+    pub fn close_window(&mut self, index: usize) -> Option<()> {
+        if index < self.windows.len() {
+            // Dropping the wrapper will drop the underlying Wayland object
+            self.windows.remove(index);
+            Some(())
+        } else {
+            None
+        }
+    }
 }
 
 impl CompositorHandler for Application {
@@ -35,10 +123,9 @@ impl CompositorHandler for Application {
         new_factor: i32,
     ) {
         trace!("[MAIN] Scale factor changed to {}", new_factor);
-        // self.scale_factor = new_factor;
-        // // Request a redraw with the new scale factor
-        // self.layer_surface.wl_surface().frame(qh, self.layer_surface.wl_surface().clone());
-        // self.layer_surface.wl_surface().commit();
+
+        _surface.frame(qh, _surface.clone());
+        _surface.commit();
     }
 
     fn transform_changed(
@@ -60,6 +147,12 @@ impl CompositorHandler for Application {
     ) {
         trace!("[MAIN] Frame callback");
         // self.render(conn, qh);
+        // if needs_repaint {
+        trace!("[MAIN] EGUI has events, scheduling next frame");
+        _surface.damage_buffer(0, 0, 256, 256);
+        _surface.frame(qh, _surface.clone());
+        _surface.commit();
+        // }
     }
 
     fn surface_enter(
@@ -120,53 +213,126 @@ impl LayerShellHandler for Application {
 
     fn configure(
         &mut self,
-        conn: &Connection,
+        _conn: &Connection,
         qh: &QueueHandle<Self>,
-        _layer: &LayerSurface,
+        target_layer: &LayerSurface,
         configure: LayerSurfaceConfigure,
         _serial: u32,
     ) {
-        // trace!("[MAIN] Configure called");
-        // let (new_width, new_height) = configure.new_size;
-        // self.width = new_width.max(1);
-        // self.height = new_height.max(1);
-        // self.input_state.set_screen_size(self.width, self.height);
-        // trace!("[MAIN] Layer surface size: {}x{}", self.width, self.height);
+        // When the compositor sends a configure we should attach a buffer
+        // so the compositor can map the window. Create a SlotPool on first
+        // configure and draw a simple solid buffer to make the window visible.
+        trace!("[COMMON] XDG layer configure");
 
-        // let adapter = &self.adapter;
-        // let surface = &self.surface;
-        // let device = &self.device;
+        // Extract size from configure
+        let new_width = configure.new_size.0;
+        let new_height = configure.new_size.1;
 
-        // let cap = surface.get_capabilities(&adapter);
-        // let surface_config = wgpu::SurfaceConfiguration {
-        //     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        //     format: cap.formats[0],
-        //     view_formats: vec![cap.formats[0]],
-        //     alpha_mode: wgpu::CompositeAlphaMode::Auto,
-        //     width: self.width * self.scale_factor as u32,
-        //     height: self.height * self.scale_factor as u32,
-        //     desired_maximum_frame_latency: 2,
-        //     // Wayland is inherently a mailbox system.
-        //     present_mode: wgpu::PresentMode::Mailbox,
-        // };
+        // Find the matching tracked window and attach a simple shm buffer
+        for win in &mut self.windows {
+            if let WindowKind::LayerSurface(layer) = &mut win.kind {
+                if layer.wl_surface().id().as_ptr() == target_layer.wl_surface().id().as_ptr() {
+                    win.width = new_width;
+                    win.height = new_height;
+                    self.input_state.set_screen_size(win.width, win.height);
 
-        // surface.configure(&self.device, &surface_config);
-        
-        // // Tell Wayland we're providing a buffer at scale_factor resolution
-        // self.layer_surface.wl_surface().set_buffer_scale(self.scale_factor);
+                    // Ensure pool exists
+                    if self.pool.is_none() {
+                        let size = (win.width as usize) * (win.height as usize) * 4;
+                        self.pool = Some(SlotPool::new(size, &self.shm_state).expect("Failed to create SlotPool"));
+                    }
 
-        // // Initialize EGUI renderer if not already done
-        // // if self.egui_renderer.is_none() {
-        // //     self.egui_renderer = Some(EguiRenderer::new(
-        // //         device,
-        // //         surface_config.format,
-        // //         None,
-        // //         1,
-        // //     ));
-        // // }
+                    let pool = self.pool.as_mut().unwrap();
+                    let stride = win.width as i32 * 4;
 
-        // // Render the frame
-        // self.render(conn, qh);
+                    // Create a buffer and paint it a simple color
+                    let (buffer, _maybe_canvas) = pool.create_buffer(win.width as i32, win.height as i32, stride, wl_shm::Format::Argb8888).expect("create buffer");
+                    if let Some(canvas) = pool.canvas(&buffer) {
+                        for chunk in canvas.chunks_exact_mut(4) {
+                            // ARGB little-endian: B, G, R, A
+                            chunk[0] = 0x30; // B
+                            chunk[1] = 0x80; // G
+                            chunk[2] = 0xC0; // R
+                            chunk[3] = 0xFF; // A
+                        }
+                    }
+
+                    // Damage, frame and attach
+                    target_layer.wl_surface().damage_buffer(0, 0, win.width as i32, win.height as i32);
+                    target_layer.wl_surface().frame(qh, target_layer.wl_surface().clone());
+                    buffer.attach_to(target_layer.wl_surface()).expect("buffer attach");
+                    target_layer.wl_surface().commit();
+
+                    win.buffer = Some(buffer);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+impl WindowHandler for Application {
+    fn request_close(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &Window) {
+        // No-op for this simple helper container
+    }
+
+    fn configure(
+        &mut self,
+        _conn: &Connection,
+        qh: &QueueHandle<Self>,
+        target_window: &Window,
+        configure: smithay_client_toolkit::shell::xdg::window::WindowConfigure,
+        _serial: u32,
+    ) {
+        // When the compositor sends a configure we should attach a buffer
+        // so the compositor can map the window. Create a SlotPool on first
+        // configure and draw a simple solid buffer to make the window visible.
+        trace!("[COMMON] XDG window configure");
+
+        // Extract size from configure
+        let new_width = configure.new_size.0.map_or(256, |v| v.get());
+        let new_height = configure.new_size.1.map_or(256, |v| v.get());
+
+        // Find the matching tracked window and attach a simple shm buffer
+        for win in &mut self.windows {
+            if let WindowKind::Window(wnd) = &mut win.kind {
+                if wnd.wl_surface().id().as_ptr() == target_window.wl_surface().id().as_ptr() {
+                    win.width = new_width;
+                    win.height = new_height;
+                    self.input_state.set_screen_size(win.width, win.height);
+
+                    // Ensure pool exists
+                    if self.pool.is_none() {
+                        let size = (win.width as usize) * (win.height as usize) * 4;
+                        self.pool = Some(SlotPool::new(size, &self.shm_state).expect("Failed to create SlotPool"));
+                    }
+
+                    let pool = self.pool.as_mut().unwrap();
+                    let stride = win.width as i32 * 4;
+
+                    // Create a buffer and paint it a simple color
+                    let (buffer, _maybe_canvas) = pool.create_buffer(win.width as i32, win.height as i32, stride, wl_shm::Format::Argb8888).expect("create buffer");
+                    if let Some(canvas) = pool.canvas(&buffer) {
+                        for chunk in canvas.chunks_exact_mut(4) {
+                            // ARGB little-endian: B, G, R, A
+                            chunk[0] = 0x30; // B
+                            chunk[1] = 0x80; // G
+                            chunk[2] = 0xC0; // R
+                            chunk[3] = 0xFF; // A
+                        }
+                    }
+
+                    // Damage, frame and attach
+                    wnd.wl_surface().damage_buffer(0, 0, win.width as i32, win.height as i32);
+                    wnd.wl_surface().frame(qh, wnd.wl_surface().clone());
+                    buffer.attach_to(wnd.wl_surface()).expect("buffer attach");
+                    wnd.commit();
+
+                    win.buffer = Some(buffer);
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -347,5 +513,8 @@ delegate_keyboard!(Application);
 delegate_pointer!(Application);
 
 delegate_layer!(Application);
+
+delegate_xdg_shell!(Application);
+delegate_xdg_window!(Application);
 
 delegate_registry!(Application);

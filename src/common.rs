@@ -1,8 +1,8 @@
 use std::{num::NonZero, rc::{Rc, Weak}};
 
 use log::trace;
-use smithay_client_toolkit::{compositor::{CompositorHandler, CompositorState}, delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_xdg_popup, delegate_xdg_shell, delegate_xdg_window, output::{OutputHandler, OutputState}, registry::{ProvidesRegistryState, RegistryState}, registry_handlers, seat::{Capability, SeatHandler, SeatState, keyboard::{KeyEvent, KeyboardHandler}, pointer::{PointerEvent, PointerHandler, ThemedPointer}}, shell::{WaylandSurface, wlr_layer::{Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure}, xdg::{XdgShell, popup::{Popup, PopupConfigure, PopupHandler}, window::{Window, WindowDecorations, WindowHandler}}}, shm::{Shm, ShmHandler, slot::{Buffer, SlotPool}}};
-use wayland_client::{Connection, QueueHandle, Proxy, protocol::{wl_output, wl_seat, wl_shm, wl_surface::WlSurface}};
+use smithay_client_toolkit::{compositor::{CompositorHandler, CompositorState}, delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_xdg_popup, delegate_xdg_shell, delegate_xdg_window, output::{OutputHandler, OutputState}, registry::{ProvidesRegistryState, RegistryState}, registry_handlers, seat::{Capability, SeatHandler, SeatState, keyboard::{KeyEvent, KeyboardHandler, Keysym}, pointer::{PointerEvent, PointerHandler, ThemedPointer}}, shell::{WaylandSurface, wlr_layer::{Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure}, xdg::{XdgShell, popup::{Popup, PopupConfigure, PopupHandler}, window::{Window, WindowConfigure, WindowDecorations, WindowHandler}}}, shm::{Shm, ShmHandler, slot::{Buffer, SlotPool}}};
+use wayland_client::{Connection, Proxy, QueueHandle, protocol::{wl_keyboard::WlKeyboard, wl_output, wl_pointer::WlPointer, wl_seat, wl_shm, wl_surface::WlSurface}};
 
 use crate::InputState;
 
@@ -249,7 +249,7 @@ impl WindowHandler for Application {
         _conn: &Connection,
         qh: &QueueHandle<Self>,
         target_window: &Window,
-        configure: smithay_client_toolkit::shell::xdg::window::WindowConfigure,
+        configure: WindowConfigure,
         _serial: u32,
     ) {
         trace!("[COMMON] XDG window configure");
@@ -264,7 +264,7 @@ impl PointerHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _pointer: &wayland_client::protocol::wl_pointer::WlPointer,
+        _pointer: &WlPointer,
         events: &[PointerEvent],
     ) {
         trace!("[MAIN] Pointer frame with {} events", events.len());
@@ -283,11 +283,11 @@ impl KeyboardHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _keyboard: &wayland_client::protocol::wl_keyboard::WlKeyboard,
+        _keyboard: &WlKeyboard,
         _surface: &WlSurface,
         _serial: u32,
         _raw: &[u32],
-        _keysyms: &[smithay_client_toolkit::seat::keyboard::Keysym],
+        _keysyms: &[Keysym],
     ) {
         trace!("[MAIN] Keyboard focus gained");
         // Keyboard focus gained
@@ -297,7 +297,7 @@ impl KeyboardHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _keyboard: &wayland_client::protocol::wl_keyboard::WlKeyboard,
+        _keyboard: &WlKeyboard,
         _surface: &WlSurface,
         _serial: u32,
     ) {
@@ -309,7 +309,7 @@ impl KeyboardHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _keyboard: &wayland_client::protocol::wl_keyboard::WlKeyboard,
+        _keyboard: &WlKeyboard,
         _serial: u32,
         event: KeyEvent,
     ) {
@@ -328,7 +328,7 @@ impl KeyboardHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _keyboard: &wayland_client::protocol::wl_keyboard::WlKeyboard,
+        _keyboard: &WlKeyboard,
         _serial: u32,
         event: KeyEvent,
     ) {
@@ -339,7 +339,7 @@ impl KeyboardHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _keyboard: &wayland_client::protocol::wl_keyboard::WlKeyboard,
+        _keyboard: &WlKeyboard,
         _serial: u32,
         modifiers: smithay_client_toolkit::seat::keyboard::Modifiers,
         _raw_modifiers: smithay_client_toolkit::seat::keyboard::RawModifiers,
@@ -352,7 +352,7 @@ impl KeyboardHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _keyboard: &wayland_client::protocol::wl_keyboard::WlKeyboard,
+        _keyboard: &WlKeyboard,
         _serial: u32,
         event: KeyEvent,
     ) {

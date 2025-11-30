@@ -64,7 +64,7 @@ impl Application {
         None
     }
 
-    fn brown_example_buffer_configure(&mut self, surface: &WlSurface, qh: &QueueHandle<Self>, new_width: u32, new_height: u32) {
+    fn single_color_example_buffer_configure(&mut self, surface: &WlSurface, qh: &QueueHandle<Self>, new_width: u32, new_height: u32, color: (u8, u8, u8)) {
 
         trace!("[COMMON] Create Brown Buffer");
 
@@ -82,9 +82,9 @@ impl Application {
         if let Some(canvas) = pool.canvas(&buffer) {
             for chunk in canvas.chunks_exact_mut(4) {
                 // ARGB little-endian: B, G, R, A
-                chunk[0] = 0x30; // B
-                chunk[1] = 0x80; // G
-                chunk[2] = 0xC0; // R
+                chunk[0] = color.2; // B
+                chunk[1] = color.1; // G
+                chunk[2] = color.0; // R
                 chunk[3] = 0xFF; // A
             }
         }
@@ -215,7 +215,7 @@ impl LayerShellHandler for Application {
         _serial: u32,
     ) {
         trace!("[COMMON] XDG layer configure");
-        self.brown_example_buffer_configure(target_layer.wl_surface(), &qh, configure.new_size.0, configure.new_size.1);
+        self.single_color_example_buffer_configure(target_layer.wl_surface(), &qh, configure.new_size.0, configure.new_size.1, (0, 255, 0));
     }
 }
 
@@ -229,7 +229,7 @@ impl PopupHandler for Application {
     ) {
         trace!("[COMMON] XDG popup configure");
 
-        self.brown_example_buffer_configure(popup.wl_surface(), qh, config.width as u32, config.height as u32);
+        self.single_color_example_buffer_configure(popup.wl_surface(), qh, config.width as u32, config.height as u32, (255, 0, 255));
     }
 
     fn done(&mut self, conn: &Connection, qh: &QueueHandle<Self>, popup: &Popup) {
@@ -255,7 +255,7 @@ impl WindowHandler for Application {
         trace!("[COMMON] XDG window configure");
         let width = configure.new_size.0.unwrap_or_else(|| NonZero::new(256).unwrap()).get();
         let height = configure.new_size.1.unwrap_or_else(|| NonZero::new(256).unwrap()).get();
-        self.brown_example_buffer_configure(target_window.wl_surface(), &qh, width, height);
+        self.single_color_example_buffer_configure(target_window.wl_surface(), &qh, width, height, (255,0, 0));
     }
 }
 

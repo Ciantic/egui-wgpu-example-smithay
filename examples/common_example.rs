@@ -3,10 +3,11 @@ use log::trace;
 use egui_smithay::*;
 
 use smithay_client_toolkit::{
-	compositor::CompositorState, output::OutputState, registry::{ProvidesRegistryState, RegistryState}, seat::SeatState, shell::{wlr_layer::LayerShell, xdg::XdgShell}, shm::Shm
+	compositor::CompositorState, output::OutputState, registry::{ProvidesRegistryState, RegistryState}, seat::SeatState, shell::{WaylandSurface, wlr_layer::{Anchor, Layer, LayerShell}, xdg::{XdgShell, window::WindowDecorations}}, shm::Shm
 };
 use smithay_clipboard::Clipboard;
 use wayland_client::{Connection, Proxy, globals::registry_queue_init};
+use wayland_protocols::xdg::shell::client::xdg_popup::XdgPopup;
 
 fn main() {
 	env_logger::init();
@@ -33,10 +34,48 @@ fn main() {
 		InputState::new(clipboard),
 	);
 
-	// Create a single xdg window tracked by the Application
-	app.create_xdg_window(&compositor_state, &xdg_shell, &qh, "common example");
+	// Experiment to share the same surface between multiple layer surfaces
+	let shared_surface = compositor_state.create_surface(&qh);
 
-    app.create_layer_surface(&compositor_state, &layer_shell, &qh, "layer example", None);
+	let example_layer_surface = layer_shell.create_layer_surface(
+		&qh,
+		shared_surface.clone(),
+		Layer::Top,
+		Some("Example"),
+		None,
+	);
+	example_layer_surface.set_anchor(Anchor::BOTTOM | Anchor::LEFT);
+	example_layer_surface.set_margin(0, 0, 20, 20);
+	example_layer_surface.set_size(256, 256);
+	example_layer_surface.commit();
+
+	let example_layer_surface2 = layer_shell.create_layer_surface(
+		&qh,
+		shared_surface.clone(),
+		Layer::Top,
+		Some("Example2"),
+		None,
+	);
+	example_layer_surface2.set_anchor(Anchor::BOTTOM | Anchor::RIGHT);
+	example_layer_surface2.set_margin(0, 20, 20, 0);
+	example_layer_surface2.set_size(512, 256);
+	example_layer_surface2.commit();
+
+	// Crazy experiment to share the same surface between multiple windows
+	let shared_win_surface = compositor_state.create_surface(&qh);
+
+	let example_window = xdg_shell.create_window(shared_win_surface.clone(), WindowDecorations::ServerDefault, &qh);
+	example_window.set_title("Example Window");
+	example_window.set_app_id("io.github.smithay.client-toolkit.EguiExample");
+	example_window.set_min_size(Some((256,256)));
+	example_window.commit();
+
+	let example_window2 = xdg_shell.create_window(shared_win_surface.clone(), WindowDecorations::ServerDefault, &qh);
+	example_window2.set_title("Example Window 2");
+	example_window2.set_app_id("io.github.smithay.client-toolkit.EguiExample2");
+	example_window2.set_min_size(Some((256,256)));
+	example_window2.commit();
+
 
 	trace!("Starting event loop for common example");
 

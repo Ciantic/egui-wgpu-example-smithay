@@ -1,9 +1,9 @@
-use std::{num::NonZero, rc::{Rc, Weak}};
+use std::{collections::HashMap, num::NonZero, rc::{Rc, Weak}};
 
 use log::trace;
 use smithay_client_toolkit::{compositor::{CompositorHandler, CompositorState}, delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_popup, delegate_xdg_shell, delegate_xdg_window, output::{OutputHandler, OutputState}, registry::{ProvidesRegistryState, RegistryState}, registry_handlers, seat::{Capability, SeatHandler, SeatState, keyboard::{KeyEvent, KeyboardHandler, Keysym}, pointer::{PointerDataExt, PointerEvent, PointerEventKind, PointerHandler, ThemeSpec, ThemedPointer, cursor_shape::CursorShapeManager}}, shell::{WaylandSurface, wlr_layer::{Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure}, xdg::{XdgShell, popup::{Popup, PopupConfigure, PopupHandler}, window::{Window, WindowConfigure, WindowDecorations, WindowHandler}}}, shm::{Shm, ShmHandler, slot::{Buffer, SlotPool}}};
 use wayland_client::{Connection, Proxy, QueueHandle, protocol::{wl_keyboard::WlKeyboard, wl_output, wl_pointer::WlPointer, wl_seat, wl_shm, wl_surface::WlSurface}};
-use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::Shape;
+use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::{Shape, WpCursorShapeDeviceV1};
 
 use crate::InputState;
 
@@ -23,8 +23,14 @@ pub struct Application {
     pub layer_surfaces: Vec<Weak<LayerSurface>>,
     pub input_state: InputState,
     pub cursor_shape_manager: CursorShapeManager,
+    
     // Pool used to create shm buffers for simple software presentation in examples
     pub pool: Option<SlotPool>,
+
+    /// For cursor set_shape to work serial parameter must match the latest wl_pointer.enter or zwp_tablet_tool_v2.proximity_in serial number sent to the client.
+    last_pointer_enter_serial: Option<u32>,
+    // Cache cursor shape devices per pointer to avoid repeated protocol calls
+    pointer_shape_devices: HashMap<u32, WpCursorShapeDeviceV1>,
 }
 
 impl Application {
@@ -41,7 +47,9 @@ impl Application {
             layer_surfaces: Vec::new(),
             input_state,
             pool: None,
+            last_pointer_enter_serial: None,
             cursor_shape_manager,
+            pointer_shape_devices: HashMap::new(),
         }
     }
 
@@ -67,6 +75,14 @@ impl Application {
             }
         }
         None
+    }
+
+    fn get_or_create_shape_device(&mut self, pointer: &WlPointer, qh: &QueueHandle<Self>) -> &WpCursorShapeDeviceV1 {
+        let pointer_id = pointer.id().as_ptr() as u32;
+        self.pointer_shape_devices.entry(pointer_id).or_insert_with(|| {
+            trace!("[COMMON] Creating new cursor shape device for pointer id {}", pointer_id);
+            self.cursor_shape_manager.get_shape_device(pointer, qh)
+        })
     }
 
     pub fn single_color_example_buffer_configure(&mut self, surface: &WlSurface, qh: &QueueHandle<Self>, new_width: u32, new_height: u32, color: (u8, u8, u8)) {
@@ -274,21 +290,30 @@ impl PointerHandler for Application {
     ) {
         trace!("[MAIN] Pointer frame with {} events", events.len());
 
-        
-        // Get serial from the last event that has one
-        if let Some(serial) = events.iter().rev().find_map(|event| match &event.kind {
-            PointerEventKind::Enter { serial } => Some(*serial),
-            PointerEventKind::Leave { serial } => Some(*serial),
-            PointerEventKind::Press { serial, .. } => Some(*serial),
-            _ => None,
-        }) {
-            let device =self.cursor_shape_manager.get_shape_device(pointer, qh);
-            device.set_shape(serial, Shape::Move);
-            trace!("[MAIN] Set cursor shape to Move with serial {}", serial);
+        for event in events {
+            match event.kind {
+                PointerEventKind::Enter { serial } => {
+                    self.last_pointer_enter_serial = Some(serial)
+                },
+                _ => {}
+            }
+            // self.input_state.handle_pointer_event(event);
         }
 
-        for event in events {
-            self.input_state.handle_pointer_event(event);
+        // Example how to set cursor shape
+        if let Some(serial) = self.last_pointer_enter_serial && let Some(last_event) = events.last() {
+            trace!("[MAIN] Setting cursor shape to Move for pointer event");
+            // If last event was within 20x20 region at top-left, set to Move shape
+            let (x, y) = last_event.position;
+            if x < 20.0 && y < 20.0 {
+                trace!("[MAIN] Pointer within top-left 20x20 region, setting Move shape");
+                let device = self.get_or_create_shape_device(pointer, qh);
+                device.set_shape(serial, Shape::Move);
+            } else {
+                trace!("[MAIN] Pointer outside top-left 20x20 region, setting Pointer shape");
+                let device = self.get_or_create_shape_device(pointer, qh);
+                device.set_shape(serial, Shape::Pointer);
+            }
         }
         
         // Request a redraw after input

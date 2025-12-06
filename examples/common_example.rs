@@ -29,6 +29,12 @@ fn main() {
     example_layer_surface.set_size(256, 256);
     example_layer_surface.commit();
 
+    app.layer_surfaces.push(Box::new(ExampleSingleColorLayerSurface {
+        layer_surface: example_layer_surface,
+        color: (255, 0, 0),
+        pool: None,
+    }));
+
     let example_layer_surface2 = app.layer_shell.create_layer_surface(
         &app.qh,
         shared_surface.clone(),
@@ -41,6 +47,12 @@ fn main() {
     example_layer_surface2.set_size(512, 256);
     example_layer_surface2.commit();
 
+    app.layer_surfaces.push(Box::new(ExampleSingleColorLayerSurface {
+        layer_surface: example_layer_surface2,
+        color: (0, 255, 0),
+        pool: None,
+    }));
+
     // Example window --------------------------
     let example_win_surface = app.compositor_state.create_surface(&app.qh);
     let example_window = app.xdg_shell.create_window(
@@ -52,6 +64,12 @@ fn main() {
     example_window.set_app_id("io.github.smithay.client-toolkit.EguiExample");
     example_window.set_min_size(Some((256, 256)));
     example_window.commit();
+
+    app.windows.push(Box::new(ExampleSingleColorWindow {
+        window: example_window.clone(),
+        color: (0, 0, 255),
+        pool: None,
+    }));
 
     // Example child window --------------------------
     // Create a surface for the child window
@@ -67,22 +85,32 @@ fn main() {
     child_window.set_min_size(Some((128, 128)));
     child_window.commit();
 
+	app.windows.push(Box::new(ExampleSingleColorWindow {
+		window: child_window,
+		color: (255, 0, 255),
+		pool: None,
+	}));
+
     // Example subsurface --------------------------
     let (subsurface, sub_wlsurface) = app
         .subcompositor_state
         .create_subsurface(example_win_surface.clone(), &app.qh);
     subsurface.set_position(20, 20);
-    app.single_color_example_buffer_configure(
-        &sub_wlsurface,
-        &app.qh.clone(),
-        128,
-        128,
-        (0, 0, 255),
-    );
     trace!(
         "Created subsurface: {:?}",
         sub_wlsurface.id().as_ptr() as usize
     );
+
+    let mut sub_example = ExampleSingleColorSubsurface {
+        wl_surface: sub_wlsurface,
+        color: (128, 128, 0),
+        pool: None,
+    };
+    
+    // Configure initial size for subsurface
+    sub_example.configure(&mut app, 100, 100);
+    
+    app.subsurfaces.push(Box::new(sub_example));
 
     // Example popup, attached to example window --------------------------
     let xdg_surface = example_window.xdg_surface();
@@ -98,6 +126,12 @@ fn main() {
         &app.xdg_shell,
     )
     .unwrap();
+
+    app.popups.push(Box::new(ExampleSingleColorPopup {
+        popup,
+        color: (255, 255, 0),
+        pool: None,
+    }));
 
     trace!("Starting event loop for common example");
 

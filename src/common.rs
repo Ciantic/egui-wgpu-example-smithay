@@ -25,6 +25,7 @@ pub struct Application {
     pub windows: Vec<Box<dyn WindowContainer>>,
     pub layer_surfaces: Vec<Box<dyn LayerSurfaceContainer>>,
     pub popups: Vec<Box<dyn PopupContainer>>,
+    pub subsurfaces: Vec<Box<dyn SubsurfaceContainer>>,
 
     pub input_state: InputState,
     pub cursor_shape_manager: CursorShapeManager,
@@ -69,6 +70,7 @@ impl Application {
             windows: Vec::new(),
             layer_surfaces: Vec::new(),
             popups: Vec::new(),
+            subsurfaces: Vec::new(),
             // windows: Vec::new(),
             // layer_surfaces: Vec::new(),
             input_state: InputState::new(clipboard),
@@ -118,37 +120,6 @@ impl Application {
         })
     }
 
-    pub fn single_color_example_buffer_configure(&mut self, surface: &WlSurface, qh: &QueueHandle<Self>, new_width: u32, new_height: u32, color: (u8, u8, u8)) {
-
-        trace!("[COMMON] Create Brown Buffer");
-
-        // Ensure pool exists
-        if self.pool.is_none() {
-            let size = (new_width as usize) * (new_height as usize) * 4;
-            self.pool = Some(SlotPool::new(size, &self.shm_state).expect("Failed to create SlotPool"));
-        }
-
-        let pool = self.pool.as_mut().unwrap();
-        let stride = new_width as i32 * 4;
-
-        // Create a buffer and paint it a simple color
-        let (buffer, _maybe_canvas) = pool.create_buffer(new_width as i32, new_height as i32, stride, wl_shm::Format::Argb8888).expect("create buffer");
-        if let Some(canvas) = pool.canvas(&buffer) {
-            for chunk in canvas.chunks_exact_mut(4) {
-                // ARGB little-endian: B, G, R, A
-                chunk[0] = color.2; // B
-                chunk[1] = color.1; // G
-                chunk[2] = color.0; // R
-                chunk[3] = 0xFF; // A
-            }
-        }
-
-        // Damage, frame and attach
-        surface.damage_buffer(0, 0, new_width as i32, new_height as i32);
-        surface.frame(qh, surface.clone());
-        buffer.attach_to(surface).expect("buffer attach");
-        surface.commit();
-    }
 }
 
 impl CompositorHandler for Application {
@@ -263,13 +234,25 @@ impl LayerShellHandler for Application {
     fn configure(
         &mut self,
         _conn: &Connection,
-        qh: &QueueHandle<Self>,
+        _qh: &QueueHandle<Self>,
         target_layer: &LayerSurface,
         configure: LayerSurfaceConfigure,
         _serial: u32,
     ) {
         trace!("[COMMON] XDG layer configure");
-        self.single_color_example_buffer_configure(target_layer.wl_surface(), &qh, configure.new_size.0, configure.new_size.1, (0, 255, 0));
+        
+        // Use raw pointer to avoid borrow checker issues
+        let self_ptr = self as *mut Self;
+        if let Some(layer) = self.layer_surfaces.iter_mut().find(|l| {
+            // Compare by wl_surface ID
+            l.get_layer_surface().wl_surface().id().as_ptr() == target_layer.wl_surface().id().as_ptr()
+        }) {
+            // SAFETY: We have exclusive access to self, and we're not invalidating
+            // the layer_surfaces vec while calling configure
+            unsafe {
+                layer.configure(&mut *self_ptr, configure);
+            }
+        }
     }
 }
 
@@ -277,17 +260,41 @@ impl PopupHandler for Application {
     fn configure(
         &mut self,
         _conn: &Connection,
-        qh: &QueueHandle<Self>,
-        popup: &Popup,
+        _qh: &QueueHandle<Self>,
+        target_popup: &Popup,
         config: PopupConfigure,
     ) {
         trace!("[COMMON] XDG popup configure");
-
-        self.single_color_example_buffer_configure(popup.wl_surface(), qh, config.width as u32, config.height as u32, (255, 0, 255));
+        
+        // Use raw pointer to avoid borrow checker issues
+        let self_ptr = self as *mut Self;
+        if let Some(popup) = self.popups.iter_mut().find(|p| {
+            // Compare by wl_surface ID
+            p.get_popup().wl_surface().id().as_ptr() == target_popup.wl_surface().id().as_ptr()
+        }) {
+            // SAFETY: We have exclusive access to self, and we're not invalidating
+            // the popups vec while calling configure
+            unsafe {
+                popup.configure(&mut *self_ptr, config);
+            }
+        }
     }
 
-    fn done(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _popup: &Popup) {
+    fn done(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, target_popup: &Popup) {
+        trace!("[COMMON] XDG popup done");
         
+        // Use raw pointer to avoid borrow checker issues
+        let self_ptr = self as *mut Self;
+        if let Some(popup) = self.popups.iter_mut().find(|p| {
+            // Compare by wl_surface ID
+            p.get_popup().wl_surface().id().as_ptr() == target_popup.wl_surface().id().as_ptr()
+        }) {
+            // SAFETY: We have exclusive access to self, and we're not invalidating
+            // the popups vec while calling done
+            unsafe {
+                popup.done(&mut *self_ptr);
+            }
+        }
     }
 }
 
@@ -551,61 +558,62 @@ pub trait WindowContainer {
 pub trait LayerSurfaceContainer {
     fn configure(
         &mut self,
-        qh: &QueueHandle<Application>,
+        app: &mut Application,
         config: LayerSurfaceConfigure,
     );
 
-    fn request_close(&mut self);
+    fn request_close(&mut self, app: &mut Application);
+
+    fn get_layer_surface(&self) -> &LayerSurface;
 }
 
 pub trait PopupContainer {
     fn configure(
         &mut self,
-        qh: &QueueHandle<Application>,
+        app: &mut Application,
         config: PopupConfigure,
     );
 
-    fn done(&mut self);
+    fn done(&mut self, app: &mut Application);
+
+    fn get_popup(&self) -> &Popup;
+}
+
+pub trait SubsurfaceContainer {
+    fn configure(&mut self, app: &mut Application, width: u32, height: u32);
+
+    fn get_wl_surface(&self) -> &WlSurface;
+}
+
+fn single_color_example_buffer_configure(pool: &mut SlotPool, shm_state: &Shm, surface: &WlSurface, qh: &QueueHandle<Application>, new_width: u32, new_height: u32, color: (u8, u8, u8)) {
+
+    trace!("[COMMON] Create Brown Buffer");
+
+    let stride = new_width as i32 * 4;
+
+    // Create a buffer and paint it a simple color
+    let (buffer, _maybe_canvas) = pool.create_buffer(new_width as i32, new_height as i32, stride, wl_shm::Format::Argb8888).expect("create buffer");
+    if let Some(canvas) = pool.canvas(&buffer) {
+        for chunk in canvas.chunks_exact_mut(4) {
+            // ARGB little-endian: B, G, R, A
+            chunk[0] = color.2; // B
+            chunk[1] = color.1; // G
+            chunk[2] = color.0; // R
+            chunk[3] = 0xFF; // A
+        }
+    }
+
+    // Damage, frame and attach
+    surface.damage_buffer(0, 0, new_width as i32, new_height as i32);
+    surface.frame(qh, surface.clone());
+    buffer.attach_to(surface).expect("buffer attach");
+    surface.commit();
 }
 
 pub struct ExampleSingleColorWindow {
     pub window: Window,
     pub color: (u8, u8, u8),
     pub pool: Option<SlotPool>,
-}
-
-impl ExampleSingleColorWindow {
-    pub fn single_color_example_buffer_configure(&mut self, shm_state: &Shm, surface: &WlSurface, qh: &QueueHandle<Application>, new_width: u32, new_height: u32, color: (u8, u8, u8)) {
-
-        trace!("[COMMON] Create Brown Buffer");
-
-        // Ensure pool exists
-        if self.pool.is_none() {
-            let size = (new_width as usize) * (new_height as usize) * 4;
-            self.pool = Some(SlotPool::new(size, shm_state).expect("Failed to create SlotPool"));
-        }
-
-        let pool = self.pool.as_mut().unwrap();
-        let stride = new_width as i32 * 4;
-
-        // Create a buffer and paint it a simple color
-        let (buffer, _maybe_canvas) = pool.create_buffer(new_width as i32, new_height as i32, stride, wl_shm::Format::Argb8888).expect("create buffer");
-        if let Some(canvas) = pool.canvas(&buffer) {
-            for chunk in canvas.chunks_exact_mut(4) {
-                // ARGB little-endian: B, G, R, A
-                chunk[0] = color.2; // B
-                chunk[1] = color.1; // G
-                chunk[2] = color.0; // R
-                chunk[3] = 0xFF; // A
-            }
-        }
-
-        // Damage, frame and attach
-        surface.damage_buffer(0, 0, new_width as i32, new_height as i32);
-        surface.frame(qh, surface.clone());
-        buffer.attach_to(surface).expect("buffer attach");
-        surface.commit();
-    }
 }
 
 impl WindowContainer for ExampleSingleColorWindow {
@@ -616,9 +624,14 @@ impl WindowContainer for ExampleSingleColorWindow {
     ) {
         let width = configure.new_size.0.unwrap_or_else(|| NonZero::new(256).unwrap()).get();
         let height = configure.new_size.1.unwrap_or_else(|| NonZero::new(256).unwrap()).get();
+        
+        // Ensure pool exists
+        let pool = app.pool.get_or_insert_with(|| {
+            SlotPool::new( (width * height * 4).try_into().unwrap(), &app.shm_state).expect("Failed to create SlotPool")
+        });
 
         // Handle window configuration changes here
-        self.single_color_example_buffer_configure(&app.shm_state, &self.window.wl_surface().clone(), &app.qh, width, height, self.color);
+        single_color_example_buffer_configure(pool, &app.shm_state, &self.window.wl_surface().clone(), &app.qh, width, height, self.color);
     }
 
     fn request_close(&mut self, app: &mut Application) -> bool {
@@ -628,5 +641,93 @@ impl WindowContainer for ExampleSingleColorWindow {
 
     fn get_window(&self) -> &Window {
         &self.window
+    }
+}
+
+pub struct ExampleSingleColorLayerSurface {
+    pub layer_surface: LayerSurface,
+    pub color: (u8, u8, u8),
+    pub pool: Option<SlotPool>,
+}
+
+impl LayerSurfaceContainer for ExampleSingleColorLayerSurface {
+    fn configure(
+        &mut self,
+        app: &mut Application,
+        config: LayerSurfaceConfigure,
+    ) {
+        let width = config.new_size.0;
+        let height = config.new_size.1;
+        
+        // Ensure pool exists
+        let pool = app.pool.get_or_insert_with(|| {
+            SlotPool::new( (width * height * 4).try_into().unwrap(), &app.shm_state).expect("Failed to create SlotPool")
+        });
+
+        // Handle layer surface configuration changes here
+        single_color_example_buffer_configure(pool, &app.shm_state, &self.layer_surface.wl_surface().clone(), &app.qh, width, height, self.color);
+    }
+
+    fn request_close(&mut self, _app: &mut Application) {
+        // Handle layer surface close request here
+    }
+
+    fn get_layer_surface(&self) -> &LayerSurface {
+        &self.layer_surface
+    }
+}
+
+pub struct ExampleSingleColorPopup {
+    pub popup: Popup,
+    pub color: (u8, u8, u8),
+    pub pool: Option<SlotPool>,
+}
+
+impl PopupContainer for ExampleSingleColorPopup {
+    fn configure(
+        &mut self,
+        app: &mut Application,
+        config: PopupConfigure,
+    ) {
+        let width = config.width as u32;
+        let height = config.height as u32;
+        
+        // Ensure pool exists
+        let pool = app.pool.get_or_insert_with(|| {
+            SlotPool::new( (width * height * 4).try_into().unwrap(), &app.shm_state).expect("Failed to create SlotPool")
+        });
+
+        // Handle popup configuration changes here
+        single_color_example_buffer_configure(pool, &app.shm_state, &self.popup.wl_surface().clone(), &app.qh, width, height, self.color);
+    }
+
+    fn done(&mut self, _app: &mut Application) {
+        // Handle popup done event here
+    }
+
+    fn get_popup(&self) -> &Popup {
+        &self.popup
+    }
+}
+
+pub struct ExampleSingleColorSubsurface {
+    pub wl_surface: WlSurface,
+    pub color: (u8, u8, u8),
+    pub pool: Option<SlotPool>,
+}
+
+impl SubsurfaceContainer for ExampleSingleColorSubsurface {
+    fn configure(&mut self, app: &mut Application, width: u32, height: u32) {
+        // Ensure pool exists
+        let pool = app.pool.get_or_insert_with(|| {
+            SlotPool::new( (width * height * 4).try_into().unwrap(), &app.shm_state).expect("Failed to create SlotPool")
+        });
+
+        // Handle subsurface configuration changes here
+        single_color_example_buffer_configure(pool, &app.shm_state, &self.wl_surface.clone(), &app.qh, width, height, self.color);
+    }
+
+    fn get_wl_surface(&self) -> &WlSurface {
+        &self.wl_surface
     }
 }

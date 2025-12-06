@@ -59,8 +59,7 @@ impl Default for EguiApp {
 fn main() {
     env_logger::init();
     // let mut egui_app = EguiApp::new();
-    let app_ = Rc::new(RefCell::new(Application::new()));
-    let mut app = app_.borrow_mut();
+    let mut app = Application::new();
 
         // Example window --------------------------
     let example_win_surface = app.compositor_state.create_surface(&app.qh);

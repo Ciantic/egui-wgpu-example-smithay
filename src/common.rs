@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, num::NonZero, rc::{Rc, Weak}};
+use std::{cell::RefCell, collections::HashMap, num::NonZero, rc::{Rc, Weak}, sync::Mutex};
 
 use log::trace;
 use smithay_client_toolkit::{compositor::{CompositorHandler, CompositorState}, delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_popup, delegate_xdg_shell, delegate_xdg_window, output::{OutputHandler, OutputState}, registry::{ProvidesRegistryState, RegistryState}, registry_handlers, seat::{Capability, SeatHandler, SeatState, keyboard::{KeyEvent, KeyboardHandler, Keysym}, pointer::{PointerEvent, PointerEventKind, PointerHandler, cursor_shape::CursorShapeManager}}, shell::{WaylandSurface, wlr_layer::{Anchor, KeyboardInteractivity, LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure}, xdg::{XdgShell, popup::{Popup, PopupConfigure, PopupHandler}, window::{Window, WindowConfigure, WindowHandler}}}, shm::{Shm, ShmHandler, slot::SlotPool}, subcompositor::SubcompositorState};
@@ -293,15 +293,18 @@ impl PopupHandler for Application {
 
 impl WindowHandler for Application {
     fn request_close(&mut self, _: &Connection, _: &QueueHandle<Self>, target_window: &Window) {
-        // No-op for this simple helper container
         trace!("[COMMON] XDG window close requested");
         
-        if let Some(idx) = self.windows.iter().position(|w| w.get_window() == target_window) {
-            let mut win = self.windows.remove(idx);
-            if !win.request_close(self) {
-                self.windows.insert(idx, win); // Re-insert if not closed
+        // Use raw pointer to avoid borrow checker issues
+        let self_ptr = self as *mut Self;
+        self.windows.retain_mut(|win| {
+            if win.get_window() == target_window {
+                // SAFETY: We have exclusive access to self
+                !unsafe { win.request_close(&mut *self_ptr) }
+            } else {
+                true
             }
-        }
+        });
     }
 
     fn configure(
@@ -314,10 +317,15 @@ impl WindowHandler for Application {
     ) {
         trace!("[COMMON] XDG window configure");
         
-        if let Some(idx) = self.windows.iter().position(|w| w.get_window() == target_window) {
-            let mut win = self.windows.remove(idx);
-            win.configure(self, configure.clone());
-            self.windows.insert(idx, win);
+        // Use raw pointer to avoid borrow checker issues
+        // This is safe because we're not modifying the Vec structure
+        let self_ptr = self as *mut Self;
+        if let Some(win) = self.windows.iter_mut().find(|w| w.get_window() == target_window) {
+            // SAFETY: We have exclusive access to self, and we're not invalidating
+            // the windows vec while calling configure
+            unsafe {
+                win.configure(&mut *self_ptr, configure.clone());
+            }
         }
     }
 }

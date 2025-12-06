@@ -1,6 +1,9 @@
 
-use smithay_client_toolkit::{seat::{keyboard::{KeyEvent, Modifiers}, pointer::PointerEvent}, shell::{wlr_layer::LayerSurface, xdg::{popup::{Popup, PopupConfigure}, window::{Window, WindowConfigure}}}, shm::slot::Buffer};
-use wayland_client::QueueHandle;
+use std::num::NonZero;
+
+use log::trace;
+use smithay_client_toolkit::{seat::{keyboard::{KeyEvent, Modifiers}, pointer::PointerEvent}, shell::{WaylandSurface, wlr_layer::{LayerSurface, LayerSurfaceConfigure}, xdg::{popup::{Popup, PopupConfigure}, window::{Window, WindowConfigure}}}, shm::{Shm, slot::{Buffer, SlotPool}}};
+use wayland_client::{QueueHandle, protocol::{wl_shm, wl_surface::WlSurface}};
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
 use crate::Application;
@@ -38,61 +41,46 @@ trait CustomPointerHandler {
     }
 }
 
-pub struct CustomWindowContainer {
-    pub xdg_window: Window,
-    // pub surface: WlSurface,
-    pub buffer: Option<Buffer>,
-    pub wp_viewporter: Option<WpViewport>,
-}
 
-pub struct CustomLayerSurfaceContainer {
-    pub layer_surface: LayerSurface,
-    // pub surface: WlSurface,
-    pub buffer: Option<Buffer>,
-    pub wp_viewporter: Option<WpViewport>,
-}
 
-pub struct CustomPopupContainer {
-    pub popup: Popup,
-    // pub surface: WlSurface,
-    pub buffer: Option<Buffer>,
-    pub wp_viewporter: Option<WpViewport>,
-}
-
-impl CustomWindowContainer {
+pub trait WindowContainer {
     fn configure(
         &mut self,
+        app: &mut Application,
         configure: WindowConfigure,
-    ) {
-    }
+    );
 
-    fn request_close(&mut self) {
-    }
+    fn request_close(&mut self, app: &mut Application) -> bool;
+
+    fn get_window(&self) -> &Window;
 }
 
-
-impl CustomPopupContainer {
+pub trait LayerSurfaceContainer {
     fn configure(
         &mut self,
+        app: &mut Application,
+        config: LayerSurfaceConfigure,
+    );
+
+    fn request_close(&mut self, app: &mut Application);
+
+    fn get_layer_surface(&self) -> &LayerSurface;
+}
+
+pub trait PopupContainer {
+    fn configure(
+        &mut self,
+        app: &mut Application,
         config: PopupConfigure,
-    ) {
-        
-    }
-    
-    fn done(&mut self) {
-    }
+    );
+
+    fn done(&mut self, app: &mut Application);
+
+    fn get_popup(&self) -> &Popup;
 }
 
+pub trait SubsurfaceContainer {
+    fn configure(&mut self, app: &mut Application, width: u32, height: u32);
 
-impl CustomLayerSurfaceContainer {
-    fn configure(
-        &mut self,
-        width: i32,
-        height: i32,
-    ) {
-        
-    }
-    fn closed(&mut self) {
-        
-    }
+    fn get_wl_surface(&self) -> &WlSurface;
 }

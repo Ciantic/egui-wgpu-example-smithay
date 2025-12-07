@@ -6,7 +6,7 @@ use smithay_client_toolkit::{seat::{keyboard::{KeyEvent, Modifiers}, pointer::Po
 use wayland_client::{QueueHandle, protocol::{wl_shm, wl_surface::WlSurface}};
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
-use crate::{Application, LayerSurfaceContainer, PopupContainer, SubsurfaceContainer, WindowContainer};
+use crate::{Application, LayerSurfaceContainer, PopupContainer, SubsurfaceContainer, WAYAPP, WindowContainer, get_app};
 
 
 fn single_color_example_buffer_configure(pool: &mut SlotPool, shm_state: &Shm, surface: &WlSurface, qh: &QueueHandle<Application>, new_width: u32, new_height: u32, color: (u8, u8, u8)) {
@@ -43,14 +43,14 @@ pub struct ExampleSingleColorWindow {
 impl WindowContainer for ExampleSingleColorWindow {
     fn configure(
         &mut self,
-        app: &mut Application,
         configure: WindowConfigure,
     ) {
+        let app = get_app();
         let width = configure.new_size.0.unwrap_or_else(|| NonZero::new(256).unwrap()).get();
         let height = configure.new_size.1.unwrap_or_else(|| NonZero::new(256).unwrap()).get();
         
         // Ensure pool exists
-        let pool = app.pool.get_or_insert_with(|| {
+        let pool = self.pool.get_or_insert_with(|| {
             SlotPool::new( (width * height * 4).try_into().unwrap(), &app.shm_state).expect("Failed to create SlotPool")
         });
 
@@ -58,7 +58,7 @@ impl WindowContainer for ExampleSingleColorWindow {
         single_color_example_buffer_configure(pool, &app.shm_state, &self.window.wl_surface().clone(), &app.qh, width, height, self.color);
     }
 
-    fn request_close(&mut self, app: &mut Application) -> bool {
+    fn request_close(&mut self) -> bool {
         // Handle window close request here
         true
     }
@@ -77,14 +77,14 @@ pub struct ExampleSingleColorLayerSurface {
 impl LayerSurfaceContainer for ExampleSingleColorLayerSurface {
     fn configure(
         &mut self,
-        app: &mut Application,
         config: LayerSurfaceConfigure,
     ) {
+        let app = get_app();
         let width = config.new_size.0;
         let height = config.new_size.1;
         
         // Ensure pool exists
-        let pool = app.pool.get_or_insert_with(|| {
+        let pool = self.pool.get_or_insert_with(|| {
             SlotPool::new( (width * height * 4).try_into().unwrap(), &app.shm_state).expect("Failed to create SlotPool")
         });
 
@@ -92,7 +92,7 @@ impl LayerSurfaceContainer for ExampleSingleColorLayerSurface {
         single_color_example_buffer_configure(pool, &app.shm_state, &self.layer_surface.wl_surface().clone(), &app.qh, width, height, self.color);
     }
 
-    fn request_close(&mut self, _app: &mut Application) {
+    fn request_close(&mut self) {
         // Handle layer surface close request here
     }
 
@@ -110,14 +110,14 @@ pub struct ExampleSingleColorPopup {
 impl PopupContainer for ExampleSingleColorPopup {
     fn configure(
         &mut self,
-        app: &mut Application,
         config: PopupConfigure,
     ) {
+        let app = get_app();
         let width = config.width as u32;
         let height = config.height as u32;
         
         // Ensure pool exists
-        let pool = app.pool.get_or_insert_with(|| {
+        let pool = self.pool.get_or_insert_with(|| {
             SlotPool::new( (width * height * 4).try_into().unwrap(), &app.shm_state).expect("Failed to create SlotPool")
         });
 
@@ -125,7 +125,7 @@ impl PopupContainer for ExampleSingleColorPopup {
         single_color_example_buffer_configure(pool, &app.shm_state, &self.popup.wl_surface().clone(), &app.qh, width, height, self.color);
     }
 
-    fn done(&mut self, _app: &mut Application) {
+    fn done(&mut self) {
         // Handle popup done event here
     }
 
@@ -141,9 +141,9 @@ pub struct ExampleSingleColorSubsurface {
 }
 
 impl SubsurfaceContainer for ExampleSingleColorSubsurface {
-    fn configure(&mut self, app: &mut Application, width: u32, height: u32) {
-        // Ensure pool exists
-        let pool = app.pool.get_or_insert_with(|| {
+    fn configure(&mut self, width: u32, height: u32) {
+        let app = get_app();
+        let pool = self.pool.get_or_insert_with(|| {
             SlotPool::new( (width * height * 4).try_into().unwrap(), &app.shm_state).expect("Failed to create SlotPool")
         });
 

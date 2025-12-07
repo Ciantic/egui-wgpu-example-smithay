@@ -11,8 +11,7 @@ use wayland_client::Proxy;
 
 fn main() {
     env_logger::init();
-
-    let mut app = Application::new();
+    let app = get_init_app();
 
     // Experiment to share the same surface between multiple layer surfaces
     let shared_surface = app.compositor_state.create_surface(&app.qh);
@@ -108,7 +107,7 @@ fn main() {
     };
     
     // Configure initial size for subsurface
-    sub_example.configure(&mut app, 100, 100);
+    sub_example.configure(100, 100);
     
     app.subsurfaces.push(Box::new(sub_example));
 

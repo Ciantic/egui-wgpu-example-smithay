@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, num::NonZero, rc::{Rc, Weak}, sync::Mutex};
+use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, num::NonZero, rc::{Rc, Weak}, sync::Mutex};
 
 use log::trace;
 use smithay_client_toolkit::{compositor::{CompositorHandler, CompositorState}, delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_popup, delegate_xdg_shell, delegate_xdg_window, output::{OutputHandler, OutputState}, registry::{ProvidesRegistryState, RegistryState}, registry_handlers, seat::{Capability, SeatHandler, SeatState, keyboard::{KeyEvent, KeyboardHandler, Keysym}, pointer::{PointerEvent, PointerEventKind, PointerHandler, cursor_shape::CursorShapeManager}}, shell::{WaylandSurface, wlr_layer::{Anchor, KeyboardInteractivity, LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure}, xdg::{XdgShell, popup::{Popup, PopupConfigure, PopupHandler}, window::{Window, WindowConfigure, WindowHandler}}}, shm::{Shm, ShmHandler, slot::SlotPool}, subcompositor::SubcompositorState};
@@ -9,6 +9,21 @@ use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::
 
 use crate::{InputState, LayerSurfaceContainer, PopupContainer, SubsurfaceContainer, WindowContainer};
 
+pub static mut WAYAPP: MaybeUninit<Application> = MaybeUninit::uninit();
+
+pub fn get_init_app() -> &'static mut Application {
+    // Look behind you! A three-headed monkey!
+    #[allow(static_mut_refs)]
+    unsafe { WAYAPP.write(Application::new()) };
+    #[allow(static_mut_refs)]
+    unsafe { WAYAPP.assume_init_mut() }
+}
+
+pub fn get_app<'a>() -> &'a mut Application {
+    // Look behind you! A three-headed monkey!
+    #[allow(static_mut_refs)]
+    unsafe { WAYAPP.assume_init_mut() }
+}
 
 pub struct Application {
     pub conn: Connection,
@@ -26,6 +41,7 @@ pub struct Application {
     pub layer_surfaces: Vec<Box<dyn LayerSurfaceContainer>>,
     pub popups: Vec<Box<dyn PopupContainer>>,
     pub subsurfaces: Vec<Box<dyn SubsurfaceContainer>>,
+    // pub clipboard: Clipboard,
 
     pub input_state: InputState,
     pub cursor_shape_manager: CursorShapeManager,
@@ -119,6 +135,7 @@ impl Application {
             self.cursor_shape_manager.get_shape_device(pointer, qh)
         })
     }
+
 
 }
 
@@ -241,17 +258,11 @@ impl LayerShellHandler for Application {
     ) {
         trace!("[COMMON] XDG layer configure");
         
-        // Use raw pointer to avoid borrow checker issues
-        let self_ptr = self as *mut Self;
-        if let Some(layer) = self.layer_surfaces.iter_mut().find(|l| {
-            // Compare by wl_surface ID
-            l.get_layer_surface().wl_surface().id().as_ptr() == target_layer.wl_surface().id().as_ptr()
-        }) {
-            // SAFETY: We have exclusive access to self, and we're not invalidating
-            // the layer_surfaces vec while calling configure
-            unsafe {
-                layer.configure(&mut *self_ptr, configure);
-            }
+
+        let index = self.layer_surfaces.iter().position(|w| w.get_layer_surface() == target_layer).expect("Layer surface is not added to application");
+        
+        if let Some(layer_surface) = self.layer_surfaces.get_mut(index) {
+            layer_surface.configure(configure);
         }
     }
 }
@@ -267,16 +278,11 @@ impl PopupHandler for Application {
         trace!("[COMMON] XDG popup configure");
         
         // Use raw pointer to avoid borrow checker issues
-        let self_ptr = self as *mut Self;
-        if let Some(popup) = self.popups.iter_mut().find(|p| {
-            // Compare by wl_surface ID
-            p.get_popup().wl_surface().id().as_ptr() == target_popup.wl_surface().id().as_ptr()
-        }) {
-            // SAFETY: We have exclusive access to self, and we're not invalidating
-            // the popups vec while calling configure
-            unsafe {
-                popup.configure(&mut *self_ptr, config);
-            }
+
+        let index = self.popups.iter().position(|p| p.get_popup() == target_popup).expect("Popup is not added to application");
+        
+        if let Some(popup) = self.popups.get_mut(index) {
+            popup.configure(config);
         }
     }
 
@@ -284,16 +290,11 @@ impl PopupHandler for Application {
         trace!("[COMMON] XDG popup done");
         
         // Use raw pointer to avoid borrow checker issues
-        let self_ptr = self as *mut Self;
-        if let Some(popup) = self.popups.iter_mut().find(|p| {
-            // Compare by wl_surface ID
-            p.get_popup().wl_surface().id().as_ptr() == target_popup.wl_surface().id().as_ptr()
-        }) {
-            // SAFETY: We have exclusive access to self, and we're not invalidating
-            // the popups vec while calling done
-            unsafe {
-                popup.done(&mut *self_ptr);
-            }
+
+        let index = self.popups.iter().position(|p| p.get_popup() == target_popup).expect("Popup is not added to application");
+        
+        if let Some(popup) = self.popups.get_mut(index) {
+            popup.done();
         }
     }
 }
@@ -302,12 +303,9 @@ impl WindowHandler for Application {
     fn request_close(&mut self, _: &Connection, _: &QueueHandle<Self>, target_window: &Window) {
         trace!("[COMMON] XDG window close requested");
         
-        // Use raw pointer to avoid borrow checker issues
-        let self_ptr = self as *mut Self;
         self.windows.retain_mut(|win| {
             if win.get_window() == target_window {
-                // SAFETY: We have exclusive access to self
-                !unsafe { win.request_close(&mut *self_ptr) }
+                !win.request_close()
             } else {
                 true
             }
@@ -323,17 +321,13 @@ impl WindowHandler for Application {
         _serial: u32,
     ) {
         trace!("[COMMON] XDG window configure");
+
+        let index = self.windows.iter().position(|w| w.get_window() == target_window).expect("Window is not added to application");
         
-        // Use raw pointer to avoid borrow checker issues
-        // This is safe because we're not modifying the Vec structure
-        let self_ptr = self as *mut Self;
-        if let Some(win) = self.windows.iter_mut().find(|w| w.get_window() == target_window) {
-            // SAFETY: We have exclusive access to self, and we're not invalidating
-            // the windows vec while calling configure
-            unsafe {
-                win.configure(&mut *self_ptr, configure.clone());
-            }
+        if let Some(window) = self.windows.get_mut(index) {
+            window.configure(configure);
         }
+
     }
 }
 

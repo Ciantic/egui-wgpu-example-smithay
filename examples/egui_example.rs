@@ -1,7 +1,7 @@
 use std::{cell::{RefCell, RefMut}, num::NonZero, rc::Rc};
 
 use egui::{CentralPanel, Context};
-use egui_smithay::{Application, ExampleSingleColorWindow, InputState, WindowContainer};
+use egui_smithay::{Application, ExampleSingleColorWindow, InputState, WindowContainer, get_init_app};
 use smithay_client_toolkit::{compositor::CompositorState, output::OutputState, registry::RegistryState, seat::{SeatState, pointer::cursor_shape::CursorShapeManager}, shell::{WaylandSurface, wlr_layer::LayerShell, xdg::{XdgShell, window::{Window, WindowConfigure, WindowDecorations}}}, shm::Shm, subcompositor::SubcompositorState};
 use smithay_clipboard::Clipboard;
 use wayland_client::{Connection, Proxy, QueueHandle, globals::registry_queue_init};
@@ -58,8 +58,7 @@ impl Default for EguiApp {
 
 fn main() {
     env_logger::init();
-    // let mut egui_app = EguiApp::new();
-    let mut app = Application::new();
+    let app = get_init_app();
 
         // Example window --------------------------
     let example_win_surface = app.compositor_state.create_surface(&app.qh);

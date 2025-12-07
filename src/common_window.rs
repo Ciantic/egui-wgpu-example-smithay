@@ -46,11 +46,10 @@ trait CustomPointerHandler {
 pub trait WindowContainer {
     fn configure(
         &mut self,
-        app: &mut Application,
         configure: WindowConfigure,
     );
 
-    fn request_close(&mut self, app: &mut Application) -> bool;
+    fn request_close(&mut self) -> bool;
 
     fn get_window(&self) -> &Window;
 }
@@ -58,11 +57,10 @@ pub trait WindowContainer {
 pub trait LayerSurfaceContainer {
     fn configure(
         &mut self,
-        app: &mut Application,
         config: LayerSurfaceConfigure,
     );
 
-    fn request_close(&mut self, app: &mut Application);
+    fn request_close(&mut self);
 
     fn get_layer_surface(&self) -> &LayerSurface;
 }
@@ -70,17 +68,16 @@ pub trait LayerSurfaceContainer {
 pub trait PopupContainer {
     fn configure(
         &mut self,
-        app: &mut Application,
         config: PopupConfigure,
     );
 
-    fn done(&mut self, app: &mut Application);
+    fn done(&mut self);
 
     fn get_popup(&self) -> &Popup;
 }
 
 pub trait SubsurfaceContainer {
-    fn configure(&mut self, app: &mut Application, width: u32, height: u32);
+    fn configure(&mut self, width: u32, height: u32);
 
     fn get_wl_surface(&self) -> &WlSurface;
 }

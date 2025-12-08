@@ -108,41 +108,36 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
         self.height = height.max(1);
         self.input_state.set_screen_size(self.width, self.height);
         self.reconfigure_surface();
-        // Render immediately to attach a buffer to the surface so Wayland will send frame callbacks
         self.render();
-        // Always request the next frame immediately for responsive resize feedback
-        self.request_frame();
     }
 
     fn frame(&mut self, _time: u32) {
-        let needs_repaint = self.render();
-        if needs_repaint {
-            self.request_frame();
-        }
+        self.render();
     }
 
     fn handle_pointer_event(&mut self, event: &PointerEvent) {
         self.input_state.handle_pointer_event(event);
-        self.needs_frame();
+        self.render();
     }
 
     fn handle_keyboard_enter(&mut self) {
         self.input_state.handle_keyboard_enter();
-        self.needs_frame();
+        self.render();
     }
 
     fn handle_keyboard_leave(&mut self) {
         self.input_state.handle_keyboard_leave();
-        self.needs_frame();
+        self.render();
     }
 
     fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, repeat: bool) {
         self.input_state.handle_keyboard_event(event, pressed, repeat);
-        self.needs_frame();
+        self.render();
     }
 
     fn update_modifiers(&mut self, modifiers: &Modifiers) {
         self.input_state.update_modifiers(modifiers);
+        self.render();
     }
 
     fn scale_factor_changed(&mut self, new_factor: i32) {
@@ -152,27 +147,13 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
         }
         self.scale_factor = factor;
         self.reconfigure_surface();
-        self.needs_frame();
+        self.render();
     }
 
-    fn needs_frame(&self) {
-        if self.surface_config.is_none() {
-            return;
-        }
-        self.request_frame();
-    }
-
-    fn render(&mut self) -> bool {
-        if self.surface_config.is_none() {
-            return false;
-        }
-
-        let surface_texture = match self.surface.get_current_texture() {
-            Ok(texture) => texture,
-            Err(_) => {
-                return false;
-            }
-        };
+    fn render(&mut self) {
+        trace!("Rendering surface {}", self.wl_surface.id());
+        let surface_texture = self.surface.get_current_texture()
+            .expect("Failed to acquire next surface texture");
 
         let texture_view = surface_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&Default::default());
@@ -222,23 +203,16 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
         surface_texture.present();
 
         // Only request next frame if there are events (similar to windowed.rs behavior)
-        !platform_output.events.is_empty()
+        if !platform_output.events.is_empty() {       
+            self.wl_surface.frame(&self.queue_handle, self.wl_surface.clone());
+            self.wl_surface.commit();
+        }
     }
 
     fn reconfigure_surface(&mut self) {
         let config = self.create_surface_config();
         self.surface.configure(&self.device, &config);
         self.surface_config = Some(config);
-    }
-
-    fn request_frame(&self) {
-        if self.surface_config.is_none() {
-            return;
-        }
-        trace!("[EGUI] Calling wl_surface.frame and commit");
-        let callback = self.wl_surface.clone();
-        self.wl_surface.frame(&self.queue_handle, callback);
-        self.wl_surface.commit();
     }
 
     fn create_surface_config(&self) -> wgpu::SurfaceConfiguration {

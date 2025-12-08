@@ -1,11 +1,23 @@
 use log::trace;
 use pollster::block_on;
-use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle};
-use smithay_clipboard::Clipboard;
-use smithay_client_toolkit::{
-    seat::{keyboard::{KeyEvent, Modifiers}, pointer::PointerEvent},
-    shell::{WaylandSurface, wlr_layer::{LayerSurface, LayerSurfaceConfigure}, xdg::{popup::{Popup, PopupConfigure}, window::{Window, WindowConfigure}}},
+use raw_window_handle::{
+    RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
+use smithay_client_toolkit::{
+    seat::{
+        keyboard::{KeyEvent, Modifiers},
+        pointer::PointerEvent,
+    },
+    shell::{
+        WaylandSurface,
+        wlr_layer::{LayerSurface, LayerSurfaceConfigure},
+        xdg::{
+            popup::{Popup, PopupConfigure},
+            window::{Window, WindowConfigure},
+        },
+    },
+};
+use smithay_clipboard::Clipboard;
 use std::ptr::NonNull;
 use wayland_client::{Proxy, QueueHandle, protocol::wl_surface::WlSurface};
 
@@ -18,7 +30,6 @@ use crate::{
 pub trait EguiAppData {
     fn ui(&mut self, ctx: &egui::Context);
 }
-
 
 struct EguiSurfaceState<A: EguiAppData> {
     wl_surface: WlSurface,
@@ -72,7 +83,7 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
         let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             memory_hints: wgpu::MemoryHints::MemoryUsage,
             ..Default::default()
-        }, ))
+        }))
         .expect("Failed to request WGPU device");
 
         let caps = surface.get_capabilities(&adapter);
@@ -132,7 +143,8 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
     }
 
     fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, repeat: bool) {
-        self.input_state.handle_keyboard_event(event, pressed, repeat);
+        self.input_state
+            .handle_keyboard_event(event, pressed, repeat);
         self.render();
     }
 
@@ -153,10 +165,14 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
 
     fn render(&mut self) {
         trace!("Rendering surface {}", self.wl_surface.id());
-        let surface_texture = self.surface.get_current_texture()
+        let surface_texture = self
+            .surface
+            .get_current_texture()
             .expect("Failed to acquire next surface texture");
 
-        let texture_view = surface_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let texture_view = surface_texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -204,22 +220,17 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
         surface_texture.present();
 
         // Only request next frame if there are events (similar to windowed.rs behavior)
-        if !platform_output.events.is_empty() {       
-            self.wl_surface.frame(&self.queue_handle, self.wl_surface.clone());
+        if !platform_output.events.is_empty() {
+            self.wl_surface
+                .frame(&self.queue_handle, self.wl_surface.clone());
             self.wl_surface.commit();
         }
     }
 
     fn reconfigure_surface(&mut self) {
-        let config = self.create_surface_config();
-        self.surface.configure(&self.device, &config);
-        self.surface_config = Some(config);
-    }
-
-    fn create_surface_config(&self) -> wgpu::SurfaceConfiguration {
         let width = self.width.saturating_mul(self.physical_scale()).max(1);
         let height = self.height.saturating_mul(self.physical_scale()).max(1);
-        wgpu::SurfaceConfiguration {
+        let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: self.output_format,
             width,
@@ -228,7 +239,9 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![self.output_format],
             desired_maximum_frame_latency: 2,
-        }
+        };
+        self.surface.configure(&self.device, &config);
+        self.surface_config = Some(config);
     }
 
     fn physical_scale(&self) -> u32 {
@@ -319,7 +332,10 @@ impl<A: EguiAppData> EguiLayerSurface<A> {
         let mut surface = EguiSurfaceState::new(layer_surface.wl_surface().clone(), egui_app);
         surface.width = width;
         surface.height = height;
-        Self { layer_surface, surface }
+        Self {
+            layer_surface,
+            surface,
+        }
     }
 }
 
@@ -338,7 +354,7 @@ impl<A: EguiAppData> KeyboardHandlerContainer for EguiLayerSurface<A> {
     fn enter(&mut self) {
         self.surface.handle_keyboard_enter();
     }
-    
+
     fn leave(&mut self) {
         self.surface.handle_keyboard_leave();
     }
@@ -410,7 +426,7 @@ impl<A: EguiAppData> KeyboardHandlerContainer for EguiPopup<A> {
     fn enter(&mut self) {
         self.surface.handle_keyboard_enter();
     }
-    
+
     fn leave(&mut self) {
         self.surface.handle_keyboard_leave();
     }
@@ -442,7 +458,9 @@ impl<A: EguiAppData> BaseTrait for EguiPopup<A> {}
 
 impl<A: EguiAppData> PopupContainer for EguiPopup<A> {
     fn configure(&mut self, config: &PopupConfigure) {
-        self.popup.wl_surface().set_buffer_scale(self.surface.scale_factor);
+        self.popup
+            .wl_surface()
+            .set_buffer_scale(self.surface.scale_factor);
         self.surface
             .configure(config.width as u32, config.height as u32);
     }
@@ -464,7 +482,10 @@ impl<A: EguiAppData> EguiSubsurface<A> {
         let mut surface = EguiSurfaceState::new(wl_surface.clone(), egui_app);
         surface.width = width;
         surface.height = height;
-        Self { wl_surface, surface }
+        Self {
+            wl_surface,
+            surface,
+        }
     }
 }
 
@@ -483,7 +504,7 @@ impl<A: EguiAppData> KeyboardHandlerContainer for EguiSubsurface<A> {
     fn enter(&mut self) {
         self.surface.handle_keyboard_enter();
     }
-    
+
     fn leave(&mut self) {
         self.surface.handle_keyboard_leave();
     }

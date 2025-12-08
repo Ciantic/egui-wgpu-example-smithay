@@ -1,6 +1,3 @@
-pub mod egui_app;
-pub use egui_app::EguiApp;
-
 pub mod egui_renderer;
 pub use egui_renderer::EguiRenderer;
 

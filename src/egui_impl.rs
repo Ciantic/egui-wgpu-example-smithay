@@ -154,6 +154,7 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
     }
 
     fn scale_factor_changed(&mut self, new_factor: i32) {
+        self.wl_surface.set_buffer_scale(new_factor);
         let factor = new_factor.max(1);
         if factor == self.scale_factor {
             return;
@@ -265,7 +266,6 @@ impl<A: EguiAppData> EguiWindow<A> {
 
 impl<A: EguiAppData> CompositorHandlerContainer for EguiWindow<A> {
     fn scale_factor_changed(&mut self, new_factor: i32) {
-        self.window.wl_surface().set_buffer_scale(new_factor);
         self.surface.scale_factor_changed(new_factor);
     }
 
@@ -341,7 +341,6 @@ impl<A: EguiAppData> EguiLayerSurface<A> {
 
 impl<A: EguiAppData> CompositorHandlerContainer for EguiLayerSurface<A> {
     fn scale_factor_changed(&mut self, new_factor: i32) {
-        self.layer_surface.wl_surface().set_buffer_scale(new_factor);
         self.surface.scale_factor_changed(new_factor);
     }
 
@@ -413,7 +412,6 @@ impl<A: EguiAppData> EguiPopup<A> {
 
 impl<A: EguiAppData> CompositorHandlerContainer for EguiPopup<A> {
     fn scale_factor_changed(&mut self, new_factor: i32) {
-        self.popup.wl_surface().set_buffer_scale(new_factor);
         self.surface.scale_factor_changed(new_factor);
     }
 
@@ -491,7 +489,6 @@ impl<A: EguiAppData> EguiSubsurface<A> {
 
 impl<A: EguiAppData> CompositorHandlerContainer for EguiSubsurface<A> {
     fn scale_factor_changed(&mut self, new_factor: i32) {
-        self.wl_surface.set_buffer_scale(new_factor);
         self.surface.scale_factor_changed(new_factor);
     }
 

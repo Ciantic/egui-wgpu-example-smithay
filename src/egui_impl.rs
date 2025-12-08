@@ -109,10 +109,15 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
         self.reconfigure_surface();
         // Render immediately to attach a buffer to the surface so Wayland will send frame callbacks
         self.render();
+        // Always request the next frame immediately for responsive resize feedback
+        self.request_frame();
     }
 
     fn frame(&mut self, _time: u32) {
-        self.render();
+        let needs_repaint = self.render();
+        if needs_repaint {
+            self.request_frame();
+        }
     }
 
     fn handle_pointer_event(&mut self, event: &PointerEvent) {
@@ -146,15 +151,15 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
         self.request_frame();
     }
 
-    fn render(&mut self) {
+    fn render(&mut self) -> bool {
         if self.surface_config.is_none() {
-            return;
+            return false;
         }
 
         let surface_texture = match self.surface.get_current_texture() {
             Ok(texture) => texture,
             Err(_) => {
-                return;
+                return false;
             }
         };
 
@@ -205,8 +210,8 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
         self.queue.submit(Some(encoder.finish()));
         surface_texture.present();
 
-        // Always request the next frame to keep rendering
-        self.request_frame();
+        // Only request next frame if there are events (similar to windowed.rs behavior)
+        !platform_output.events.is_empty()
     }
 
     fn reconfigure_surface(&mut self) {

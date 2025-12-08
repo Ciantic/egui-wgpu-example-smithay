@@ -72,6 +72,7 @@ fn main() {
         Some("Example2"),
         None,
     );
+    layer_surface.set_keyboard_interactivity(smithay_client_toolkit::shell::wlr_layer::KeyboardInteractivity::Exclusive);
     layer_surface.set_anchor(Anchor::BOTTOM | Anchor::LEFT);
     layer_surface.set_margin(0, 0, 20, 20);
     layer_surface.set_size(256, 256);

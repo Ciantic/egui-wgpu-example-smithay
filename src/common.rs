@@ -539,7 +539,7 @@ impl KeyboardHandler for Application {
         _raw: &[u32],
         _keysyms: &[Keysym],
     ) {
-        trace!("[MAIN] Keyboard focus gained");
+        trace!("[MAIN] Keyboard focus gained on surface {:?}", surface.id());
         let surface_id = surface.id();
         self.focused_surface = Some(surface_id.clone());
         self.get_by_surface_id(&surface_id).and_then(|kind| {
@@ -599,7 +599,7 @@ impl KeyboardHandler for Application {
         _serial: u32,
         event: KeyEvent,
     ) {
-        trace!("[MAIN] Key pressed");
+        trace!("[MAIN] Key pressed: keycode={}", event.raw_code);
 
         if let Some(surface_id) = self.focused_surface.clone() {
             if let Some(kind) = self.get_by_surface_id(&surface_id) {
@@ -725,15 +725,14 @@ impl SeatHandler for Application {
         trace!("[MAIN] New seat capability: {:?}", capability);
         if capability == Capability::Keyboard {
             trace!("[MAIN] Creating wl_keyboard");
-            // match self.seat_state.get_keyboard(qh, &seat) {
-            //     Ok(wl_keyboard) => {
-            //         self.wl_keyboard = Some(wl_keyboard);
-            //         trace!("[MAIN] wl_keyboard created successfully");
-            //     }
-            //     Err(e) => {
-            //         trace!("[MAIN] Failed to create wl_keyboard: {:?}", e);
-            //     }
-            // }
+            match self.seat_state.get_keyboard(qh, &seat, None) {
+                Ok(_wl_keyboard) => {
+                    trace!("[MAIN] wl_keyboard created successfully");
+                }
+                Err(e) => {
+                    trace!("[MAIN] Failed to create wl_keyboard: {:?}", e);
+                }
+            }
         }
         if capability == Capability::Pointer {
             let _ = self.seat_state.get_pointer(&qh, &seat);

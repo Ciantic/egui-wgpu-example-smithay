@@ -53,10 +53,7 @@ pub struct Application {
     surfaces_by_id: HashMap<ObjectId, Kind>,
     pub clipboard: Clipboard,
 
-    pub cursor_shape_manager: CursorShapeManager,
-    
-    // Pool used to create shm buffers for simple software presentation in examples
-    pub pool: Option<SlotPool>,
+    cursor_shape_manager: CursorShapeManager,
 
     /// For cursor set_shape to work serial parameter must match the latest wl_pointer.enter or zwp_tablet_tool_v2.proximity_in serial number sent to the client.
     last_pointer_enter_serial: Option<u32>,
@@ -104,7 +101,6 @@ impl Application {
             // layer_surfaces: Vec::new(),
             clipboard,
             cursor_shape_manager,
-            pool: None,
             last_pointer_enter_serial: None,
             last_pointer: None,
             pointer_shape_devices: HashMap::new(),
@@ -120,7 +116,7 @@ impl Application {
         }
     }
 
-    pub fn change_cursor(&mut self, shape: Shape) {
+    pub fn set_cursor(&mut self, shape: Shape) {
         if let Some(serial) = self.last_pointer_enter_serial && let Some(pointer) = &self.last_pointer {
             let pointer_id = pointer.id();
             let device = self.pointer_shape_devices.entry(pointer_id).or_insert_with(|| {
@@ -522,10 +518,10 @@ impl PointerHandler for Application {
             let (x, y) = last_event.position;
             if x < 20.0 && y < 20.0 {
                 trace!("[MAIN] Pointer within top-left 20x20 region, setting Move shape");
-                self.change_cursor(Shape::Move);
+                self.set_cursor(Shape::Move);
             } else {
                 trace!("[MAIN] Pointer outside top-left 20x20 region, setting Pointer shape");
-                self.change_cursor(Shape::Pointer);
+                self.set_cursor(Shape::Pointer);
             }
         }
         

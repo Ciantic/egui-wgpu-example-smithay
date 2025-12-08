@@ -111,7 +111,7 @@ pub trait PopupContainer : BaseTrait {
         config: &PopupConfigure,
     );
 
-    fn done(&mut self);
+    fn done(&mut self) {}
 
     fn get_popup(&self) -> &Popup;
 }

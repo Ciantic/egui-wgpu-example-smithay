@@ -101,6 +101,17 @@ impl InputState {
         }
     }
 
+    pub fn handle_keyboard_enter(&mut self) {
+        trace!("[INPUT] Keyboard focus entered surface");
+        // This is strictly not the same thing, but Wayland can't know for instance if layer surface has focus or not, but it knows keyboard focus is on the surface
+        self.events.push(Event::WindowFocused(true));
+    }
+
+    pub fn handle_keyboard_leave(&mut self) {
+        trace!("[INPUT] Keyboard focus left surface");
+        self.events.push(Event::WindowFocused(false));
+    }
+
     pub fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, is_repeat: bool) {
         trace!("[INPUT] Keyboard event - keysym: {:?}, raw_code: {}, pressed: {}, repeat: {}, utf8: {:?}", 
                  event.keysym.raw(), event.raw_code, pressed, is_repeat, event.utf8);

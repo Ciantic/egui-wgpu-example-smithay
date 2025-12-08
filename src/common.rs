@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, rc::Rc};
 
 use log::trace;
-use smithay_client_toolkit::{compositor::{CompositorHandler, CompositorState}, delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_popup, delegate_xdg_shell, delegate_xdg_window, output::{OutputHandler, OutputState}, registry::{ProvidesRegistryState, RegistryState}, registry_handlers, seat::{Capability, SeatHandler, SeatState, keyboard::{KeyEvent, KeyboardHandler, Keysym}, pointer::{PointerEvent, PointerEventKind, PointerHandler, cursor_shape::CursorShapeManager}}, shell::{WaylandSurface, wlr_layer::{LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure}, xdg::{XdgShell, popup::{Popup, PopupConfigure, PopupHandler}, window::{Window, WindowConfigure, WindowHandler}}}, shm::{Shm, ShmHandler, slot::SlotPool}, subcompositor::SubcompositorState};
+use smithay_client_toolkit::{compositor::{CompositorHandler, CompositorState}, delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_popup, delegate_xdg_shell, delegate_xdg_window, output::{OutputHandler, OutputState}, registry::{ProvidesRegistryState, RegistryState}, registry_handlers, seat::{Capability, SeatHandler, SeatState, keyboard::{KeyEvent, KeyboardHandler, Keysym}, pointer::{PointerEvent, PointerEventKind, PointerHandler, cursor_shape::CursorShapeManager}}, shell::{WaylandSurface, wlr_layer::{LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure}, xdg::{XdgShell, popup::{Popup, PopupConfigure, PopupHandler}, window::{Window, WindowConfigure, WindowHandler}}}, shm::{Shm, ShmHandler}, subcompositor::SubcompositorState};
 use smithay_clipboard::Clipboard;
 use wayland_backend::client::ObjectId;
 use wayland_client::{Connection, EventQueue, Proxy, QueueHandle, globals::registry_queue_init, protocol::{wl_keyboard::WlKeyboard, wl_output, wl_pointer::WlPointer, wl_seat, wl_surface::WlSurface}};
@@ -61,7 +61,7 @@ pub struct Application {
     // Cache cursor shape devices per pointer to avoid repeated protocol calls
     pointer_shape_devices: HashMap<ObjectId, WpCursorShapeDeviceV1>,
     /// Currently focused keyboard surface
-    focused_surface: Option<ObjectId>,
+    keyboard_focused_surface: Option<ObjectId>,
 }
 
 impl Application {
@@ -104,7 +104,7 @@ impl Application {
             last_pointer_enter_serial: None,
             last_pointer: None,
             pointer_shape_devices: HashMap::new(),
-            focused_surface: None,
+            keyboard_focused_surface: None,
         }
     }
 
@@ -541,7 +541,7 @@ impl KeyboardHandler for Application {
     ) {
         trace!("[MAIN] Keyboard focus gained on surface {:?}", surface.id());
         let surface_id = surface.id();
-        self.focused_surface = Some(surface_id.clone());
+        self.keyboard_focused_surface = Some(surface_id.clone());
         self.get_by_surface_id(&surface_id).and_then(|kind| {
             match kind {
                 Kind::Window(window) => {
@@ -588,7 +588,7 @@ impl KeyboardHandler for Application {
             }
             Some(())
         });
-        self.focused_surface = None;
+        self.keyboard_focused_surface = None;
     }
 
     fn press_key(
@@ -601,7 +601,7 @@ impl KeyboardHandler for Application {
     ) {
         trace!("[MAIN] Key pressed: keycode={}", event.raw_code);
 
-        if let Some(surface_id) = self.focused_surface.clone() {
+        if let Some(surface_id) = self.keyboard_focused_surface.clone() {
             if let Some(kind) = self.get_by_surface_id(&surface_id) {
                 match kind {
                     Kind::Window(window) => {
@@ -629,7 +629,7 @@ impl KeyboardHandler for Application {
         _serial: u32,
         event: KeyEvent,
     ) {
-        if let Some(surface_id) = &self.focused_surface {
+        if let Some(surface_id) = &self.keyboard_focused_surface {
             if let Some(kind) = self.get_by_surface_id(&surface_id) {
                 match kind {
                     Kind::Window(window) => {
@@ -659,7 +659,7 @@ impl KeyboardHandler for Application {
         _raw_modifiers: smithay_client_toolkit::seat::keyboard::RawModifiers,
         _layout: u32,
     ) {
-        if let Some(surface_id) = &self.focused_surface {
+        if let Some(surface_id) = &self.keyboard_focused_surface {
             if let Some(kind) = self.get_by_surface_id(&surface_id) {
                 match kind {
                     Kind::Window(window) => {
@@ -687,7 +687,7 @@ impl KeyboardHandler for Application {
         _serial: u32,
         event: KeyEvent,
     ) {
-        if let Some(surface_id) = &self.focused_surface {
+        if let Some(surface_id) = &self.keyboard_focused_surface {
             if let Some(kind) = self.get_by_surface_id(&surface_id) {
                 match kind {
                     Kind::Window(window) => {

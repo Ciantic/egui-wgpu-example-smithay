@@ -126,6 +126,16 @@ impl<A: EguiAppData> EguiSurfaceState<A> {
         self.needs_frame();
     }
 
+    fn handle_keyboard_enter(&mut self) {
+        self.input_state.handle_keyboard_enter();
+        self.needs_frame();
+    }
+
+    fn handle_keyboard_leave(&mut self) {
+        self.input_state.handle_keyboard_leave();
+        self.needs_frame();
+    }
+
     fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, repeat: bool) {
         self.input_state.handle_keyboard_event(event, pressed, repeat);
         self.needs_frame();
@@ -275,6 +285,13 @@ impl<A: EguiAppData> CompositorHandlerContainer for EguiWindow<A> {
 }
 
 impl<A: EguiAppData> KeyboardHandlerContainer for EguiWindow<A> {
+    fn enter(&mut self) {
+        self.surface.handle_keyboard_enter();
+    }
+    fn leave(&mut self) {
+        self.surface.handle_keyboard_leave();
+    }
+
     fn press_key(&mut self, event: &KeyEvent) {
         self.surface.handle_keyboard_event(event, true, false);
     }
@@ -339,6 +356,14 @@ impl<A: EguiAppData> CompositorHandlerContainer for EguiLayerSurface<A> {
 }
 
 impl<A: EguiAppData> KeyboardHandlerContainer for EguiLayerSurface<A> {
+    fn enter(&mut self) {
+        self.surface.handle_keyboard_enter();
+    }
+    
+    fn leave(&mut self) {
+        self.surface.handle_keyboard_leave();
+    }
+
     fn press_key(&mut self, event: &KeyEvent) {
         self.surface.handle_keyboard_event(event, true, false);
     }
@@ -401,6 +426,14 @@ impl<A: EguiAppData> CompositorHandlerContainer for EguiPopup<A> {
 }
 
 impl<A: EguiAppData> KeyboardHandlerContainer for EguiPopup<A> {
+    fn enter(&mut self) {
+        self.surface.handle_keyboard_enter();
+    }
+    
+    fn leave(&mut self) {
+        self.surface.handle_keyboard_leave();
+    }
+
     fn press_key(&mut self, event: &KeyEvent) {
         self.surface.handle_keyboard_event(event, true, false);
     }
@@ -464,6 +497,14 @@ impl<A: EguiAppData> CompositorHandlerContainer for EguiSubsurface<A> {
 }
 
 impl<A: EguiAppData> KeyboardHandlerContainer for EguiSubsurface<A> {
+    fn enter(&mut self) {
+        self.surface.handle_keyboard_enter();
+    }
+    
+    fn leave(&mut self) {
+        self.surface.handle_keyboard_leave();
+    }
+
     fn press_key(&mut self, event: &KeyEvent) {
         self.surface.handle_keyboard_event(event, true, false);
     }

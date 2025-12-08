@@ -1,7 +1,7 @@
 use std::{cell::{RefCell, RefMut}, num::NonZero, rc::Rc};
 
 use egui::{CentralPanel, Context};
-use egui_smithay::{Application, ExampleSingleColorWindow, InputState, WindowContainer, get_init_app};
+use egui_smithay::{Application, EguiWgpuSurface, EguiWindow, ExampleSingleColorWindow, InputState, WindowContainer, egui_app, get_init_app};
 use smithay_client_toolkit::{compositor::CompositorState, output::OutputState, registry::RegistryState, seat::{SeatState, pointer::cursor_shape::CursorShapeManager}, shell::{WaylandSurface, wlr_layer::LayerShell, xdg::{XdgShell, window::{Window, WindowConfigure, WindowDecorations}}}, shm::Shm, subcompositor::SubcompositorState};
 use smithay_clipboard::Clipboard;
 use wayland_client::{Connection, Proxy, QueueHandle, globals::registry_queue_init};
@@ -72,20 +72,13 @@ fn main() {
     example_window.set_min_size(Some((256, 256)));
     example_window.commit();
 
-    app.push_window(ExampleSingleColorWindow {
-        window: example_window,
-        color: (0, 255, 0),
-        pool: None,
+    let egui_app = EguiApp::new();
+
+    app.push_window(EguiWindow {
+        surface: EguiWgpuSurface::new(example_win_surface),
+        // TODO: How to attach egui_app
     });
 
-    // app.window_configure.insert(example_window.wl_surface().id().clone(), Box::new(|app, config, wl_surface| {
-    //     let width = config.new_size.0.unwrap().get();
-    //     let height = config.new_size.1.unwrap().get();
-    //     app.single_color_example_buffer_configure(&wl_surface, &app.qh.clone(), width, height, (0, 0,  255));
-    //     // Here we would normally set up the EGUI renderer with the window's surface
-    //     // For simplicity, we just log that the window was configured
-    //     log::info!("Configured window: {:?}", config);
-    // }));
 
     app.run_blocking();
 }

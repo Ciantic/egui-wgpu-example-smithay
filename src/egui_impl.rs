@@ -3,7 +3,7 @@ use wayland_client::protocol::wl_surface::WlSurface;
 
 use crate::{BaseTrait, CompositorHandlerContainer, KeyboardHandlerContainer, PointerHandlerContainer, WindowContainer};
 
-struct EguiWgpuSurface {
+pub struct EguiWgpuSurface {
     // TODO: Other stuff?
     pub wl_surface: WlSurface,
 }
@@ -18,19 +18,19 @@ impl EguiWgpuSurface {
     }
 }
 
-struct EguiWindow {
+pub struct EguiWindow {
     pub surface: EguiWgpuSurface,
 }
 
-struct EguiLayerSurface {
+pub struct EguiLayerSurface {
     pub surface: EguiWgpuSurface,
 }
 
-struct EguiPopup {
+pub struct EguiPopup {
     pub surface: EguiWgpuSurface,
 }
 
-struct EguiSubsurface {
+pub struct EguiSubsurface {
     pub surface: EguiWgpuSurface,
 }
 

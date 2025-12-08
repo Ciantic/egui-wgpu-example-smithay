@@ -1,6 +1,6 @@
 use egui::{CentralPanel, Context};
-use egui_smithay::{EguiAppData, EguiWindow, get_init_app};
-use smithay_client_toolkit::shell::{WaylandSurface, xdg::window::WindowDecorations};
+use egui_smithay::{EguiAppData, EguiLayerSurface, EguiWindow, get_init_app};
+use smithay_client_toolkit::shell::{WaylandSurface, wlr_layer::{Anchor, Layer}, xdg::window::WindowDecorations};
 
 struct EguiApp {
     counter: i32,
@@ -63,6 +63,24 @@ fn main() {
 
     let egui_app = EguiApp::default();
     app.push_window(EguiWindow::new(&app, example_window, egui_app));
+
+    let shared_surface = app.compositor_state.create_surface(&app.qh);
+    let layer_surface = app.layer_shell.create_layer_surface(
+        &app.qh,
+        shared_surface.clone(),
+        Layer::Top,
+        Some("Example2"),
+        None,
+    );
+    layer_surface.set_anchor(Anchor::BOTTOM | Anchor::LEFT);
+    layer_surface.set_margin(0, 0, 20, 20);
+    layer_surface.set_size(256, 256);
+    layer_surface.commit();
+
+    app.push_layer_surface(EguiLayerSurface::new(
+        &app,
+        layer_surface,
+        EguiApp::default()));
 
     app.run_blocking();
 }

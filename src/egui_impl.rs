@@ -4,14 +4,15 @@ use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle,
 use smithay_clipboard::Clipboard;
 use smithay_client_toolkit::{
     seat::{keyboard::{KeyEvent, Modifiers}, pointer::PointerEvent},
-    shell::{WaylandSurface, xdg::window::{Window, WindowConfigure}},
+    shell::{WaylandSurface, wlr_layer::{LayerSurface, LayerSurfaceConfigure}, xdg::{popup::{Popup, PopupConfigure}, window::{Window, WindowConfigure}}},
 };
 use std::ptr::NonNull;
 use wayland_client::{Proxy, QueueHandle, protocol::wl_surface::WlSurface};
 
 use crate::{
     Application, BaseTrait, CompositorHandlerContainer, EguiRenderer, InputState,
-    KeyboardHandlerContainer, PointerHandlerContainer, WindowContainer,
+    KeyboardHandlerContainer, LayerSurfaceContainer, PointerHandlerContainer, PopupContainer,
+    SubsurfaceContainer, WindowContainer,
 };
 
 pub trait EguiAppData {
@@ -311,5 +312,190 @@ impl<A: EguiAppData> WindowContainer for EguiWindow<A> {
 
     fn get_window(&self) -> &Window {
         &self.window
+    }
+}
+
+pub struct EguiLayerSurface<A: EguiAppData> {
+    pub layer_surface: LayerSurface,
+    surface: EguiSurfaceState<A>,
+}
+
+impl<A: EguiAppData> EguiLayerSurface<A> {
+    pub fn new(app: &Application, layer_surface: LayerSurface, egui_app: A) -> Self {
+        let surface = EguiSurfaceState::new(app, layer_surface.wl_surface().clone(), egui_app);
+        Self { layer_surface, surface }
+    }
+}
+
+impl<A: EguiAppData> CompositorHandlerContainer for EguiLayerSurface<A> {
+    fn scale_factor_changed(&mut self, new_factor: i32) {
+        self.layer_surface.wl_surface().set_buffer_scale(new_factor);
+        self.surface.scale_factor_changed(new_factor);
+    }
+
+    fn frame(&mut self, time: u32) {
+        self.surface.frame(time);
+    }
+}
+
+impl<A: EguiAppData> KeyboardHandlerContainer for EguiLayerSurface<A> {
+    fn press_key(&mut self, event: &KeyEvent) {
+        self.surface.handle_keyboard_event(event, true, false);
+    }
+
+    fn release_key(&mut self, event: &KeyEvent) {
+        self.surface.handle_keyboard_event(event, false, false);
+    }
+
+    fn update_modifiers(&mut self, modifiers: &Modifiers) {
+        self.surface.update_modifiers(modifiers);
+    }
+
+    fn repeat_key(&mut self, event: &KeyEvent) {
+        self.surface.handle_keyboard_event(event, true, true);
+    }
+}
+
+impl<A: EguiAppData> PointerHandlerContainer for EguiLayerSurface<A> {
+    fn pointer_frame(&mut self, event: &PointerEvent) {
+        self.surface.handle_pointer_event(event);
+    }
+}
+
+impl<A: EguiAppData> BaseTrait for EguiLayerSurface<A> {}
+
+impl<A: EguiAppData> LayerSurfaceContainer for EguiLayerSurface<A> {
+    fn configure(&mut self, config: &LayerSurfaceConfigure) {
+        self.layer_surface
+            .wl_surface()
+            .set_buffer_scale(self.surface.scale_factor);
+        self.surface.configure(config.new_size.0, config.new_size.1);
+    }
+
+    fn get_layer_surface(&self) -> &LayerSurface {
+        &self.layer_surface
+    }
+}
+
+pub struct EguiPopup<A: EguiAppData> {
+    pub popup: Popup,
+    surface: EguiSurfaceState<A>,
+}
+
+impl<A: EguiAppData> EguiPopup<A> {
+    pub fn new(app: &Application, popup: Popup, egui_app: A) -> Self {
+        let surface = EguiSurfaceState::new(app, popup.wl_surface().clone(), egui_app);
+        Self { popup, surface }
+    }
+}
+
+impl<A: EguiAppData> CompositorHandlerContainer for EguiPopup<A> {
+    fn scale_factor_changed(&mut self, new_factor: i32) {
+        self.popup.wl_surface().set_buffer_scale(new_factor);
+        self.surface.scale_factor_changed(new_factor);
+    }
+
+    fn frame(&mut self, time: u32) {
+        self.surface.frame(time);
+    }
+}
+
+impl<A: EguiAppData> KeyboardHandlerContainer for EguiPopup<A> {
+    fn press_key(&mut self, event: &KeyEvent) {
+        self.surface.handle_keyboard_event(event, true, false);
+    }
+
+    fn release_key(&mut self, event: &KeyEvent) {
+        self.surface.handle_keyboard_event(event, false, false);
+    }
+
+    fn update_modifiers(&mut self, modifiers: &Modifiers) {
+        self.surface.update_modifiers(modifiers);
+    }
+
+    fn repeat_key(&mut self, event: &KeyEvent) {
+        self.surface.handle_keyboard_event(event, true, true);
+    }
+}
+
+impl<A: EguiAppData> PointerHandlerContainer for EguiPopup<A> {
+    fn pointer_frame(&mut self, event: &PointerEvent) {
+        self.surface.handle_pointer_event(event);
+    }
+}
+
+impl<A: EguiAppData> BaseTrait for EguiPopup<A> {}
+
+impl<A: EguiAppData> PopupContainer for EguiPopup<A> {
+    fn configure(&mut self, config: &PopupConfigure) {
+        self.popup.wl_surface().set_buffer_scale(self.surface.scale_factor);
+        self.surface
+            .configure(config.width as u32, config.height as u32);
+    }
+
+    fn done(&mut self) {}
+
+    fn get_popup(&self) -> &Popup {
+        &self.popup
+    }
+}
+
+pub struct EguiSubsurface<A: EguiAppData> {
+    pub wl_surface: WlSurface,
+    surface: EguiSurfaceState<A>,
+}
+
+impl<A: EguiAppData> EguiSubsurface<A> {
+    pub fn new(app: &Application, wl_surface: WlSurface, egui_app: A) -> Self {
+        let surface = EguiSurfaceState::new(app, wl_surface.clone(), egui_app);
+        Self { wl_surface, surface }
+    }
+}
+
+impl<A: EguiAppData> CompositorHandlerContainer for EguiSubsurface<A> {
+    fn scale_factor_changed(&mut self, new_factor: i32) {
+        self.wl_surface.set_buffer_scale(new_factor);
+        self.surface.scale_factor_changed(new_factor);
+    }
+
+    fn frame(&mut self, time: u32) {
+        self.surface.frame(time);
+    }
+}
+
+impl<A: EguiAppData> KeyboardHandlerContainer for EguiSubsurface<A> {
+    fn press_key(&mut self, event: &KeyEvent) {
+        self.surface.handle_keyboard_event(event, true, false);
+    }
+
+    fn release_key(&mut self, event: &KeyEvent) {
+        self.surface.handle_keyboard_event(event, false, false);
+    }
+
+    fn update_modifiers(&mut self, modifiers: &Modifiers) {
+        self.surface.update_modifiers(modifiers);
+    }
+
+    fn repeat_key(&mut self, event: &KeyEvent) {
+        self.surface.handle_keyboard_event(event, true, true);
+    }
+}
+
+impl<A: EguiAppData> PointerHandlerContainer for EguiSubsurface<A> {
+    fn pointer_frame(&mut self, event: &PointerEvent) {
+        self.surface.handle_pointer_event(event);
+    }
+}
+
+impl<A: EguiAppData> BaseTrait for EguiSubsurface<A> {}
+
+impl<A: EguiAppData> SubsurfaceContainer for EguiSubsurface<A> {
+    fn configure(&mut self, width: u32, height: u32) {
+        self.wl_surface.set_buffer_scale(self.surface.scale_factor);
+        self.surface.configure(width, height);
+    }
+
+    fn get_wl_surface(&self) -> &WlSurface {
+        &self.wl_surface
     }
 }

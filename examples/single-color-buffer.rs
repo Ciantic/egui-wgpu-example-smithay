@@ -13,12 +13,11 @@ fn main() {
     env_logger::init();
     let app = get_init_app();
 
-    // Experiment to share the same surface between multiple layer surfaces
-    let shared_surface = app.compositor_state.create_surface(&app.qh);
+    let surface1 = app.compositor_state.create_surface(&app.qh);
 
     let example_layer_surface = app.layer_shell.create_layer_surface(
         &app.qh,
-        shared_surface.clone(),
+        surface1.clone(),
         Layer::Top,
         Some("Example"),
         None,
@@ -34,9 +33,11 @@ fn main() {
         pool: None,
     });
 
+    let surface2 = app.compositor_state.create_surface(&app.qh);
+
     let example_layer_surface2 = app.layer_shell.create_layer_surface(
         &app.qh,
-        shared_surface.clone(),
+        surface2.clone(),
         Layer::Top,
         Some("Example2"),
         None,

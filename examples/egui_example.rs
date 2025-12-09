@@ -88,12 +88,13 @@ fn main() {
     layer_surface.set_size(256, 256);
     layer_surface.commit();
 
-    app.push_layer_surface(EguiLayerSurface::new(
-        layer_surface,
-        EguiApp::default(),
-        256,
-        256,
-    ));
+    let egui_layer_surface = EguiLayerSurface::new(layer_surface, EguiApp::default(), 256, 256);
+
+    app.push_layer_surface(egui_layer_surface);
+
+    // let shared_layer_surface = Rc::new(RefCell::new();
+
+    // app.push_layer_surface(shared_layer_surface.clone());
 
     app.run_blocking();
 }

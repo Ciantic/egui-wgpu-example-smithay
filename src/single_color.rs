@@ -21,6 +21,7 @@ use smithay_client_toolkit::shell::xdg::window::Window;
 use smithay_client_toolkit::shell::xdg::window::WindowConfigure;
 use smithay_client_toolkit::shm::slot::SlotPool;
 use std::num::NonZero;
+use wayland_client::Proxy;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_shm;
 use wayland_client::protocol::wl_surface::WlSurface;
@@ -108,8 +109,8 @@ impl WindowContainer for ExampleSingleColorWindow {
         true
     }
 
-    fn get_window(&self) -> &Window {
-        &self.window
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.window.wl_surface().id()
     }
 }
 
@@ -151,8 +152,8 @@ impl LayerSurfaceContainer for ExampleSingleColorLayerSurface {
         // Handle layer surface close request here
     }
 
-    fn get_layer_surface(&self) -> &LayerSurface {
-        &self.layer_surface
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.layer_surface.wl_surface().id()
     }
 }
 
@@ -194,8 +195,8 @@ impl PopupContainer for ExampleSingleColorPopup {
         // Handle popup done event here
     }
 
-    fn get_popup(&self) -> &Popup {
-        &self.popup
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.popup.wl_surface().id()
     }
 }
 
@@ -229,7 +230,7 @@ impl SubsurfaceContainer for ExampleSingleColorSubsurface {
         );
     }
 
-    fn get_wl_surface(&self) -> &WlSurface {
-        &self.wl_surface
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.wl_surface.id()
     }
 }

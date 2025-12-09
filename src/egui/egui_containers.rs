@@ -329,8 +329,8 @@ impl<A: EguiAppData> WindowContainer for EguiWindow<A> {
         self.surface.configure(width, height);
     }
 
-    fn get_window(&self) -> &Window {
-        &self.window
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.window.wl_surface().id()
     }
 }
 
@@ -403,8 +403,8 @@ impl<A: EguiAppData> LayerSurfaceContainer for EguiLayerSurface<A> {
         self.surface.configure(config.new_size.0, config.new_size.1);
     }
 
-    fn get_layer_surface(&self) -> &LayerSurface {
-        &self.layer_surface
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.layer_surface.wl_surface().id()
     }
 }
 
@@ -477,8 +477,8 @@ impl<A: EguiAppData> PopupContainer for EguiPopup<A> {
 
     fn done(&mut self) {}
 
-    fn get_popup(&self) -> &Popup {
-        &self.popup
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.popup.wl_surface().id()
     }
 }
 
@@ -549,8 +549,8 @@ impl<A: EguiAppData> SubsurfaceContainer for EguiSubsurface<A> {
         self.surface.configure(width, height);
     }
 
-    fn get_wl_surface(&self) -> &WlSurface {
-        &self.wl_surface
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.wl_surface.id()
     }
 }
 

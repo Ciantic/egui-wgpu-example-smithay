@@ -1,14 +1,14 @@
 use egui::CentralPanel;
 use egui::Context;
-use egui_smithay::EguiAppData;
-use egui_smithay::EguiLayerSurface;
-use egui_smithay::EguiWindow;
-use egui_smithay::get_init_app;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shell::wlr_layer::Anchor;
 use smithay_client_toolkit::shell::wlr_layer::KeyboardInteractivity;
 use smithay_client_toolkit::shell::wlr_layer::Layer;
 use smithay_client_toolkit::shell::xdg::window::WindowDecorations;
+use wayapp::EguiAppData;
+use wayapp::EguiLayerSurface;
+use wayapp::EguiWindow;
+use wayapp::get_init_app;
 
 struct EguiApp {
     counter: i32,

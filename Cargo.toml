@@ -1,5 +1,5 @@
 [package]
-name = "egui-wgpu-example-smithay"
+name = "wayapp"
 version = "0.1.0"
 edition = "2024"
 
@@ -23,5 +23,5 @@ wgpu = "27.0.1"
 env_logger = "0.11.8"
 
 [lib]
-name = "egui_smithay"
+name = "wayapp"
 path = "src/lib.rs"

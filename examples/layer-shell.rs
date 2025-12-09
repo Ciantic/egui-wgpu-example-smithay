@@ -2,11 +2,8 @@
 //
 // This is old example that doesn't use the Application wrapper
 
-use crate::EguiWgpuRenderer;
-use crate::WaylandToEguiInput;
 use egui::CentralPanel;
 use egui::Context;
-use egui_smithay::*;
 use log::trace;
 use raw_window_handle::RawDisplayHandle;
 use raw_window_handle::RawWindowHandle;
@@ -49,6 +46,8 @@ use smithay_client_toolkit::shm::Shm;
 use smithay_client_toolkit::shm::ShmHandler;
 use smithay_clipboard::Clipboard;
 use std::ptr::NonNull;
+use wayapp::EguiWgpuRenderer;
+use wayapp::WaylandToEguiInput;
 use wayland_client::Connection;
 use wayland_client::Proxy;
 use wayland_client::QueueHandle;

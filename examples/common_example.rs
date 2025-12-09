@@ -1,4 +1,3 @@
-use egui_smithay::*;
 use log::trace;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shell::wlr_layer::Anchor;
@@ -7,6 +6,7 @@ use smithay_client_toolkit::shell::xdg::XdgPositioner;
 use smithay_client_toolkit::shell::xdg::XdgSurface;
 use smithay_client_toolkit::shell::xdg::popup::Popup;
 use smithay_client_toolkit::shell::xdg::window::WindowDecorations;
+use wayapp::*;
 use wayland_client::Proxy;
 
 fn main() {

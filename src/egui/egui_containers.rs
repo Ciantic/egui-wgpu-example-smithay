@@ -317,7 +317,11 @@ impl<A: EguiAppData> PointerHandlerContainer for EguiWindow<A> {
     }
 }
 
-impl<A: EguiAppData> BaseTrait for EguiWindow<A> {}
+impl<A: EguiAppData> BaseTrait for EguiWindow<A> {
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.window.wl_surface().id()
+    }
+}
 
 impl<A: EguiAppData> WindowContainer for EguiWindow<A> {
     fn configure(&mut self, configure: &WindowConfigure) {
@@ -327,10 +331,6 @@ impl<A: EguiAppData> WindowContainer for EguiWindow<A> {
             .wl_surface()
             .set_buffer_scale(self.surface.scale_factor);
         self.surface.configure(width, height);
-    }
-
-    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
-        self.window.wl_surface().id()
     }
 }
 
@@ -393,7 +393,11 @@ impl<A: EguiAppData> PointerHandlerContainer for EguiLayerSurface<A> {
     }
 }
 
-impl<A: EguiAppData> BaseTrait for EguiLayerSurface<A> {}
+impl<A: EguiAppData> BaseTrait for EguiLayerSurface<A> {
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.layer_surface.wl_surface().id()
+    }
+}
 
 impl<A: EguiAppData> LayerSurfaceContainer for EguiLayerSurface<A> {
     fn configure(&mut self, config: &LayerSurfaceConfigure) {
@@ -401,10 +405,6 @@ impl<A: EguiAppData> LayerSurfaceContainer for EguiLayerSurface<A> {
             .wl_surface()
             .set_buffer_scale(self.surface.scale_factor);
         self.surface.configure(config.new_size.0, config.new_size.1);
-    }
-
-    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
-        self.layer_surface.wl_surface().id()
     }
 }
 
@@ -464,7 +464,11 @@ impl<A: EguiAppData> PointerHandlerContainer for EguiPopup<A> {
     }
 }
 
-impl<A: EguiAppData> BaseTrait for EguiPopup<A> {}
+impl<A: EguiAppData> BaseTrait for EguiPopup<A> {
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.popup.wl_surface().id()
+    }
+}
 
 impl<A: EguiAppData> PopupContainer for EguiPopup<A> {
     fn configure(&mut self, config: &PopupConfigure) {
@@ -476,10 +480,6 @@ impl<A: EguiAppData> PopupContainer for EguiPopup<A> {
     }
 
     fn done(&mut self) {}
-
-    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
-        self.popup.wl_surface().id()
-    }
 }
 
 pub struct EguiSubsurface<A: EguiAppData> {
@@ -541,16 +541,16 @@ impl<A: EguiAppData> PointerHandlerContainer for EguiSubsurface<A> {
     }
 }
 
-impl<A: EguiAppData> BaseTrait for EguiSubsurface<A> {}
+impl<A: EguiAppData> BaseTrait for EguiSubsurface<A> {
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.wl_surface.id()
+    }
+}
 
 impl<A: EguiAppData> SubsurfaceContainer for EguiSubsurface<A> {
     fn configure(&mut self, width: u32, height: u32) {
         self.wl_surface.set_buffer_scale(self.surface.scale_factor);
         self.surface.configure(width, height);
-    }
-
-    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
-        self.wl_surface.id()
     }
 }
 

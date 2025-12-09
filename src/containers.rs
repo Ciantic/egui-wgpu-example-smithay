@@ -45,12 +45,11 @@ pub trait CompositorHandlerContainer {
 pub trait BaseTrait:
     CompositorHandlerContainer + KeyboardHandlerContainer + PointerHandlerContainer
 {
+    fn get_object_id(&self) -> ObjectId;
 }
 
 pub trait WindowContainer: BaseTrait {
     fn configure(&mut self, configure: &WindowConfigure);
-
-    fn get_object_id(&self) -> ObjectId;
 
     fn allowed_to_close(&self) -> bool {
         true
@@ -63,22 +62,16 @@ pub trait LayerSurfaceContainer: BaseTrait {
     fn configure(&mut self, config: &LayerSurfaceConfigure);
 
     fn closed(&mut self) {}
-
-    fn get_object_id(&self) -> ObjectId;
 }
 
 pub trait PopupContainer: BaseTrait {
     fn configure(&mut self, config: &PopupConfigure);
 
     fn done(&mut self) {}
-
-    fn get_object_id(&self) -> ObjectId;
 }
 
 pub trait SubsurfaceContainer: BaseTrait {
     fn configure(&mut self, width: u32, height: u32);
-
-    fn get_object_id(&self) -> ObjectId;
 }
 
 // Blanket implementations for Rc<RefCell<T>> to allow shared mutable access
@@ -136,15 +129,15 @@ impl<T: CompositorHandlerContainer + ?Sized> CompositorHandlerContainer for Rc<R
     }
 }
 
-impl<T: BaseTrait + ?Sized> BaseTrait for Rc<RefCell<T>> {}
+impl<T: BaseTrait + ?Sized> BaseTrait for Rc<RefCell<T>> {
+    fn get_object_id(&self) -> ObjectId {
+        self.borrow().get_object_id()
+    }
+}
 
 impl<T: WindowContainer + ?Sized> WindowContainer for Rc<RefCell<T>> {
     fn configure(&mut self, configure: &WindowConfigure) {
         self.borrow_mut().configure(configure);
-    }
-
-    fn get_object_id(&self) -> ObjectId {
-        self.borrow().get_object_id()
     }
 
     fn allowed_to_close(&self) -> bool {
@@ -164,10 +157,6 @@ impl<T: LayerSurfaceContainer + ?Sized> LayerSurfaceContainer for Rc<RefCell<T>>
     fn closed(&mut self) {
         self.borrow_mut().closed();
     }
-
-    fn get_object_id(&self) -> ObjectId {
-        self.borrow().get_object_id()
-    }
 }
 
 impl<T: PopupContainer + ?Sized> PopupContainer for Rc<RefCell<T>> {
@@ -178,18 +167,10 @@ impl<T: PopupContainer + ?Sized> PopupContainer for Rc<RefCell<T>> {
     fn done(&mut self) {
         self.borrow_mut().done();
     }
-
-    fn get_object_id(&self) -> ObjectId {
-        self.borrow().get_object_id()
-    }
 }
 
 impl<T: SubsurfaceContainer + ?Sized> SubsurfaceContainer for Rc<RefCell<T>> {
     fn configure(&mut self, width: u32, height: u32) {
         self.borrow_mut().configure(width, height);
-    }
-
-    fn get_object_id(&self) -> ObjectId {
-        self.borrow().get_object_id()
     }
 }

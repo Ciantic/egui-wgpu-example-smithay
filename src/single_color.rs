@@ -72,7 +72,11 @@ pub struct ExampleSingleColorWindow {
 impl CompositorHandlerContainer for ExampleSingleColorWindow {}
 impl KeyboardHandlerContainer for ExampleSingleColorWindow {}
 impl PointerHandlerContainer for ExampleSingleColorWindow {}
-impl BaseTrait for ExampleSingleColorWindow {}
+impl BaseTrait for ExampleSingleColorWindow {
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.window.wl_surface().id()
+    }
+}
 
 impl WindowContainer for ExampleSingleColorWindow {
     fn configure(&mut self, configure: &WindowConfigure) {
@@ -108,10 +112,6 @@ impl WindowContainer for ExampleSingleColorWindow {
     fn allowed_to_close(&self) -> bool {
         true
     }
-
-    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
-        self.window.wl_surface().id()
-    }
 }
 
 pub struct ExampleSingleColorLayerSurface {
@@ -123,7 +123,11 @@ pub struct ExampleSingleColorLayerSurface {
 impl CompositorHandlerContainer for ExampleSingleColorLayerSurface {}
 impl KeyboardHandlerContainer for ExampleSingleColorLayerSurface {}
 impl PointerHandlerContainer for ExampleSingleColorLayerSurface {}
-impl BaseTrait for ExampleSingleColorLayerSurface {}
+impl BaseTrait for ExampleSingleColorLayerSurface {
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.layer_surface.wl_surface().id()
+    }
+}
 
 impl LayerSurfaceContainer for ExampleSingleColorLayerSurface {
     fn configure(&mut self, config: &LayerSurfaceConfigure) {
@@ -151,10 +155,6 @@ impl LayerSurfaceContainer for ExampleSingleColorLayerSurface {
     fn closed(&mut self) {
         // Handle layer surface close request here
     }
-
-    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
-        self.layer_surface.wl_surface().id()
-    }
 }
 
 pub struct ExampleSingleColorPopup {
@@ -166,7 +166,11 @@ pub struct ExampleSingleColorPopup {
 impl CompositorHandlerContainer for ExampleSingleColorPopup {}
 impl KeyboardHandlerContainer for ExampleSingleColorPopup {}
 impl PointerHandlerContainer for ExampleSingleColorPopup {}
-impl BaseTrait for ExampleSingleColorPopup {}
+impl BaseTrait for ExampleSingleColorPopup {
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.popup.wl_surface().id()
+    }
+}
 
 impl PopupContainer for ExampleSingleColorPopup {
     fn configure(&mut self, config: &PopupConfigure) {
@@ -194,10 +198,6 @@ impl PopupContainer for ExampleSingleColorPopup {
     fn done(&mut self) {
         // Handle popup done event here
     }
-
-    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
-        self.popup.wl_surface().id()
-    }
 }
 
 pub struct ExampleSingleColorSubsurface {
@@ -209,7 +209,11 @@ pub struct ExampleSingleColorSubsurface {
 impl CompositorHandlerContainer for ExampleSingleColorSubsurface {}
 impl KeyboardHandlerContainer for ExampleSingleColorSubsurface {}
 impl PointerHandlerContainer for ExampleSingleColorSubsurface {}
-impl BaseTrait for ExampleSingleColorSubsurface {}
+impl BaseTrait for ExampleSingleColorSubsurface {
+    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
+        self.wl_surface.id()
+    }
+}
 
 impl SubsurfaceContainer for ExampleSingleColorSubsurface {
     fn configure(&mut self, width: u32, height: u32) {
@@ -228,9 +232,5 @@ impl SubsurfaceContainer for ExampleSingleColorSubsurface {
             height,
             self.color,
         );
-    }
-
-    fn get_object_id(&self) -> wayland_backend::client::ObjectId {
-        self.wl_surface.id()
     }
 }

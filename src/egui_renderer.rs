@@ -1,4 +1,4 @@
-// Original for Winit: 
+// Original for Winit:
 // https://github.com/kaphula/winit-egui-wgpu-template/blob/master/src/egui_tools.rs
 
 use egui::Context;
@@ -36,7 +36,7 @@ impl EguiRenderer {
                 depth_stencil_format: output_depth_format,
 
                 ..Default::default()
-            }
+            },
         );
 
         EguiRenderer {
@@ -103,7 +103,7 @@ impl EguiRenderer {
         }
 
         self.frame_started = false;
-        
+
         full_output.platform_output
     }
 }

@@ -1,6 +1,10 @@
 use egui::{CentralPanel, Context};
 use egui_smithay::{EguiAppData, EguiLayerSurface, EguiWindow, get_init_app};
-use smithay_client_toolkit::shell::{WaylandSurface, wlr_layer::{Anchor, KeyboardInteractivity, Layer}, xdg::window::WindowDecorations};
+use smithay_client_toolkit::shell::{
+    WaylandSurface,
+    wlr_layer::{Anchor, KeyboardInteractivity, Layer},
+    xdg::window::WindowDecorations,
+};
 
 struct EguiApp {
     counter: i32,
@@ -9,7 +13,10 @@ struct EguiApp {
 
 impl Default for EguiApp {
     fn default() -> Self {
-        Self { counter: 0, text: "Hello from EGUI!".into() }
+        Self {
+            counter: 0,
+            text: "Hello from EGUI!".into(),
+        }
     }
 }
 
@@ -43,7 +50,6 @@ impl EguiAppData for EguiApp {
         });
     }
 }
-
 
 fn main() {
     env_logger::init();
@@ -82,7 +88,8 @@ fn main() {
         layer_surface,
         EguiApp::default(),
         256,
-        256));
+        256,
+    ));
 
     app.run_blocking();
 }

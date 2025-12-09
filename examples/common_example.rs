@@ -105,10 +105,10 @@ fn main() {
         color: (128, 128, 0),
         pool: None,
     };
-    
+
     // Configure initial size for subsurface
     sub_example.configure(100, 100);
-    
+
     app.push_subsurface(sub_example);
 
     // Example popup, attached to example window --------------------------
@@ -133,7 +133,7 @@ fn main() {
     });
 
     trace!("Starting event loop for common example");
-	drop(example_window);
+    drop(example_window);
 
     // Run the Wayland event loop. This example will run until the process is killed
     app.run_blocking();

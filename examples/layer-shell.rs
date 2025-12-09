@@ -3,41 +3,43 @@
 use egui_smithay::*;
 
 use crate::egui_renderer::EguiRenderer;
-use crate::input_handler::{InputState};
+use crate::input_handler::InputState;
+use egui::{CentralPanel, Context};
+use log::trace;
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
-use smithay_clipboard::Clipboard;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
-    delegate_compositor, delegate_output, delegate_registry, delegate_seat, delegate_layer,
-    delegate_keyboard, delegate_pointer, delegate_shm,
+    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer,
+    delegate_registry, delegate_seat, delegate_shm,
     output::{OutputHandler, OutputState},
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
     seat::{
         Capability, SeatHandler, SeatState,
-        keyboard::{KeyboardHandler, KeyEvent},
-        pointer::{PointerHandler, PointerEvent, ThemedPointer, ThemeSpec, CursorIcon as WaylandCursorIcon},
+        keyboard::{KeyEvent, KeyboardHandler},
+        pointer::{
+            CursorIcon as WaylandCursorIcon, PointerEvent, PointerHandler, ThemeSpec, ThemedPointer,
+        },
     },
     shell::{
-        wlr_layer::{
-            Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler,
-            LayerSurface, LayerSurfaceConfigure,
-        },
         WaylandSurface,
+        wlr_layer::{
+            Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface,
+            LayerSurfaceConfigure,
+        },
     },
     shm::{Shm, ShmHandler},
 };
-use wgpu::DeviceDescriptor;
+use smithay_clipboard::Clipboard;
 use std::ptr::NonNull;
 use wayland_client::{
+    Connection, Proxy, QueueHandle,
     globals::registry_queue_init,
     protocol::{wl_output, wl_seat, wl_surface},
-    Connection, Proxy, QueueHandle,
 };
-use log::trace;
-use egui::{CentralPanel, Context};
+use wgpu::DeviceDescriptor;
 
 struct EguiApp {
     counter: i32,
@@ -55,9 +57,9 @@ impl EguiApp {
     pub fn ui(&mut self, ctx: &Context) {
         CentralPanel::default().show(ctx, |ui| {
             ui.heading("Egui WGPU / Smithay example");
-            
+
             ui.separator();
-            
+
             ui.label(format!("Counter: {}", self.counter));
             if ui.button("Increment").clicked() {
                 self.counter += 1;
@@ -65,18 +67,18 @@ impl EguiApp {
             if ui.button("Decrement").clicked() {
                 self.counter -= 1;
             }
-            
+
             ui.separator();
-            
+
             ui.horizontal(|ui| {
                 ui.label("Text input:");
                 ui.text_edit_singleline(&mut self.text);
             });
-            
+
             ui.label(format!("You wrote: {}", self.text));
-            
+
             ui.separator();
-            
+
             ui.label("This is a simple EGUI app running on Wayland via Smithay toolkit!");
         });
     }
@@ -101,8 +103,20 @@ impl OutputHandler for Probe {
     }
 
     fn new_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _output: wl_output::WlOutput) {}
-    fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _output: wl_output::WlOutput) {}
-    fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, _output: wl_output::WlOutput) {}
+    fn update_output(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _output: wl_output::WlOutput,
+    ) {
+    }
+    fn output_destroyed(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _output: wl_output::WlOutput,
+    ) {
+    }
 }
 
 delegate_output!(Probe);
@@ -191,7 +205,7 @@ fn main() {
         memory_hints: wgpu::MemoryHints::MemoryUsage,
         ..Default::default()
     }))
-        .expect("Failed to request device");
+    .expect("Failed to request device");
 
     // Initialize clipboard
     let clipboard = unsafe { Clipboard::new(conn.display().id().as_ptr() as *mut _) };
@@ -211,7 +225,7 @@ fn main() {
         surface,
         adapter,
         queue,
-        
+
         egui_renderer: None,
         egui_app: EguiApp::new(),
         input_state: InputState::new(clipboard),
@@ -249,7 +263,7 @@ struct MainState {
     device: wgpu::Device,
     queue: wgpu::Queue,
     surface: wgpu::Surface<'static>,
-    
+
     egui_renderer: Option<EguiRenderer>,
     egui_app: EguiApp,
     input_state: InputState,
@@ -259,7 +273,7 @@ struct MainState {
 impl MainState {
     fn render(&mut self, conn: &Connection, qh: &QueueHandle<Self>) {
         trace!("[MAIN] Render called");
-        
+
         if self.egui_renderer.is_none() {
             trace!("[MAIN] Skipping render - EGUI renderer not initialized yet");
             return;
@@ -272,10 +286,12 @@ impl MainState {
                 return;
             }
         };
-        
-        let texture_view = surface_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let texture_view = surface_texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        
+
         // Clear the surface first
         {
             let _renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -294,21 +310,24 @@ impl MainState {
                 occlusion_query_set: None,
             });
         }
-        
+
         // Render EGUI
         let needs_repaint = if let Some(renderer) = &mut self.egui_renderer {
             let raw_input = self.input_state.take_raw_input();
-            
+
             renderer.begin_frame(raw_input);
             self.egui_app.ui(renderer.context());
-            
+
             // For Wayland: configure surface at physical resolution, render egui at logical resolution
             // pixels_per_point tells egui how many physical pixels per logical point
             let screen_descriptor = egui_wgpu::ScreenDescriptor {
-                size_in_pixels: [self.width * self.scale_factor as u32, self.height * self.scale_factor as u32],
+                size_in_pixels: [
+                    self.width * self.scale_factor as u32,
+                    self.height * self.scale_factor as u32,
+                ],
                 pixels_per_point: self.scale_factor as f32,
             };
-            
+
             let platform_output = renderer.end_frame_and_draw(
                 &self.device,
                 &self.queue,
@@ -316,18 +335,18 @@ impl MainState {
                 &texture_view,
                 screen_descriptor,
             );
-            
+
             // Handle clipboard commands from egui
             for command in &platform_output.commands {
                 self.input_state.handle_output_command(command);
             }
-            
+
             // Handle cursor icon changes from EGUI
             if let Some(themed_pointer) = &self.themed_pointer {
                 let cursor_icon = egui_to_wayland_cursor(platform_output.cursor_icon);
                 let _ = themed_pointer.set_cursor(conn, cursor_icon);
             }
-            
+
             // For now, just check if there are any platform commands (indicates interaction)
             !platform_output.events.is_empty()
         } else {
@@ -337,11 +356,13 @@ impl MainState {
         // Submit the command in the queue to execute
         self.queue.submit(Some(encoder.finish()));
         surface_texture.present();
-        
+
         // Only request next frame if EGUI needs repaint (animations, etc.)
         if needs_repaint {
             trace!("[MAIN] EGUI has events, scheduling next frame");
-            self.layer_surface.wl_surface().frame(qh, self.layer_surface.wl_surface().clone());
+            self.layer_surface
+                .wl_surface()
+                .frame(qh, self.layer_surface.wl_surface().clone());
             self.layer_surface.wl_surface().commit();
         }
     }
@@ -358,7 +379,9 @@ impl CompositorHandler for MainState {
         trace!("[MAIN] Scale factor changed to {}", new_factor);
         self.scale_factor = new_factor;
         // Request a redraw with the new scale factor
-        self.layer_surface.wl_surface().frame(qh, self.layer_surface.wl_surface().clone());
+        self.layer_surface
+            .wl_surface()
+            .frame(qh, self.layer_surface.wl_surface().clone());
         self.layer_surface.wl_surface().commit();
     }
 
@@ -472,18 +495,15 @@ impl LayerShellHandler for MainState {
         };
 
         surface.configure(&self.device, &surface_config);
-        
+
         // Tell Wayland we're providing a buffer at scale_factor resolution
-        self.layer_surface.wl_surface().set_buffer_scale(self.scale_factor);
+        self.layer_surface
+            .wl_surface()
+            .set_buffer_scale(self.scale_factor);
 
         // Initialize EGUI renderer if not already done
         if self.egui_renderer.is_none() {
-            self.egui_renderer = Some(EguiRenderer::new(
-                device,
-                surface_config.format,
-                None,
-                1,
-            ));
+            self.egui_renderer = Some(EguiRenderer::new(device, surface_config.format, None, 1));
         }
 
         // Render the frame
@@ -505,7 +525,9 @@ impl PointerHandler for MainState {
         }
         // Request a redraw after input
         trace!("[MAIN] Requesting frame after pointer input");
-        self.layer_surface.wl_surface().frame(&_qh, self.layer_surface.wl_surface().clone());
+        self.layer_surface
+            .wl_surface()
+            .frame(&_qh, self.layer_surface.wl_surface().clone());
         self.layer_surface.wl_surface().commit();
     }
 }
@@ -547,12 +569,13 @@ impl KeyboardHandler for MainState {
     ) {
         trace!("[MAIN] Key pressed");
 
-        
         self.input_state.handle_keyboard_event(&event, true, false);
-        
+
         // Request a redraw after input
         trace!("[MAIN] Requesting frame after key press");
-        self.layer_surface.wl_surface().frame(&_qh, self.layer_surface.wl_surface().clone());
+        self.layer_surface
+            .wl_surface()
+            .frame(&_qh, self.layer_surface.wl_surface().clone());
         self.layer_surface.wl_surface().commit();
     }
 
@@ -590,7 +613,9 @@ impl KeyboardHandler for MainState {
     ) {
         self.input_state.handle_keyboard_event(&event, true, true);
         // Request a redraw after input
-        self.layer_surface.wl_surface().frame(&_qh, self.layer_surface.wl_surface().clone());
+        self.layer_surface
+            .wl_surface()
+            .frame(&_qh, self.layer_surface.wl_surface().clone());
         self.layer_surface.wl_surface().commit();
     }
 }
@@ -610,7 +635,9 @@ impl SeatHandler for MainState {
         capability: Capability,
     ) {
         trace!("[MAIN] New seat capability: {:?}", capability);
-        if capability == Capability::Keyboard && self.seat_state.get_keyboard(qh, &seat, None).is_err() {
+        if capability == Capability::Keyboard
+            && self.seat_state.get_keyboard(qh, &seat, None).is_err()
+        {
             trace!("[MAIN] Failed to get keyboard");
         }
         if capability == Capability::Pointer && self.themed_pointer.is_none() {
@@ -656,7 +683,7 @@ impl ShmHandler for MainState {
 fn egui_to_wayland_cursor(cursor: egui::CursorIcon) -> WaylandCursorIcon {
     use egui::CursorIcon::*;
     use smithay_client_toolkit::seat::pointer::CursorIcon as WCI;
-    
+
     match cursor {
         Default => WCI::Default,
         None => WCI::Default,

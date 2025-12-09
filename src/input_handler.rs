@@ -1,9 +1,9 @@
 use egui::{Event, Key, Modifiers, PointerButton, Pos2, RawInput};
+use log::trace;
 use smithay_client_toolkit::seat::keyboard::{KeyEvent, Keysym, Modifiers as WaylandModifiers};
 use smithay_client_toolkit::seat::pointer::{PointerEvent, PointerEventKind};
 use smithay_clipboard::Clipboard;
 use std::time::Instant;
-use log::trace;
 
 /// Handles input events from Wayland and converts them to EGUI RawInput
 pub struct InputState {
@@ -89,7 +89,7 @@ impl InputState {
                     horizontal.discrete as f32 * 10.0,
                     vertical.discrete as f32 * 10.0,
                 );
-                
+
                 if scroll_delta != egui::Vec2::ZERO {
                     self.events.push(Event::MouseWheel {
                         unit: egui::MouseWheelUnit::Line,
@@ -113,21 +113,32 @@ impl InputState {
     }
 
     pub fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, is_repeat: bool) {
-        trace!("[INPUT] Keyboard event - keysym: {:?}, raw_code: {}, pressed: {}, repeat: {}, utf8: {:?}", 
-                 event.keysym.raw(), event.raw_code, pressed, is_repeat, event.utf8);
-        
+        trace!(
+            "[INPUT] Keyboard event - keysym: {:?}, raw_code: {}, pressed: {}, repeat: {}, utf8: {:?}",
+            event.keysym.raw(),
+            event.raw_code,
+            pressed,
+            is_repeat,
+            event.utf8
+        );
+
         // Check for clipboard operations BEFORE general key handling
         if pressed && !is_repeat && self.modifiers.ctrl {
             match event.keysym {
                 Keysym::c => self.events.push(Event::Copy),
                 Keysym::x => self.events.push(Event::Cut),
-                Keysym::v => self.events.push(Event::Paste(self.clipboard.load().unwrap_or_default())),
+                Keysym::v => self
+                    .events
+                    .push(Event::Paste(self.clipboard.load().unwrap_or_default())),
                 _ => (),
             }
         }
 
         if let Some(key) = keysym_to_egui_key(event.keysym) {
-            trace!("[INPUT] Mapped to EGUI key: {:?}, repeat: {}", key, is_repeat);
+            trace!(
+                "[INPUT] Mapped to EGUI key: {:?}, repeat: {}",
+                key, is_repeat
+            );
             // Note: Egui expects repeats to have pressed=true
             self.events.push(Event::Key {
                 key,
@@ -146,7 +157,10 @@ impl InputState {
                 }
             }
         } else {
-            trace!("[INPUT] No EGUI key mapping for keysym: {:?}", event.keysym.raw());
+            trace!(
+                "[INPUT] No EGUI key mapping for keysym: {:?}",
+                event.keysym.raw()
+            );
         }
 
         if event.utf8.is_some() {
@@ -155,13 +169,15 @@ impl InputState {
     }
 
     pub fn update_modifiers(&mut self, wayland_mods: &WaylandModifiers) {
-        trace!("[INPUT] Modifiers updated - ctrl: {}, shift: {}, alt: {}", 
-                 wayland_mods.ctrl, wayland_mods.shift, wayland_mods.alt);
+        trace!(
+            "[INPUT] Modifiers updated - ctrl: {}, shift: {}, alt: {}",
+            wayland_mods.ctrl, wayland_mods.shift, wayland_mods.alt
+        );
         self.modifiers = Modifiers {
             alt: wayland_mods.alt,
             ctrl: wayland_mods.ctrl,
             shift: wayland_mods.shift,
-            mac_cmd: false, // Not applicable on Linux/Wayland
+            mac_cmd: false,             // Not applicable on Linux/Wayland
             command: wayland_mods.ctrl, // On non-Mac, command is ctrl
         };
     }
@@ -177,7 +193,7 @@ impl InputState {
         if !events.is_empty() {
             trace!("[INPUT] Events: {:?}", events);
         }
-        
+
         RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 Pos2::ZERO,
@@ -199,15 +215,15 @@ impl InputState {
             egui::OutputCommand::CopyText(text) => {
                 self.clipboard.store(text.clone());
                 trace!("[INPUT] Copied text to clipboard: {:?}", text);
-            },
+            }
             egui::OutputCommand::CopyImage(_image) => {
                 // Handle image copy if needed
                 trace!("[INPUT] CopyImage command received (not implemented)");
                 // TODO: Implement image copying to clipboard if required
-            },
+            }
             egui::OutputCommand::OpenUrl(url) => {
                 trace!("[INPUT] OpenUrl command received: {}", url.url);
-            },
+            }
         }
     }
 }
@@ -238,9 +254,9 @@ fn keysym_to_egui_key(keysym: Keysym) -> Option<Key> {
         Keysym::Right => Key::ArrowRight,
         Keysym::Up => Key::ArrowUp,
         Keysym::Down => Key::ArrowDown,
-        
+
         Keysym::space => Key::Space,
-        
+
         // Letters
         Keysym::a => Key::A,
         Keysym::b => Key::B,
@@ -268,7 +284,7 @@ fn keysym_to_egui_key(keysym: Keysym) -> Option<Key> {
         Keysym::x => Key::X,
         Keysym::y => Key::Y,
         Keysym::z => Key::Z,
-        
+
         // Numbers
         Keysym::_0 => Key::Num0,
         Keysym::_1 => Key::Num1,
@@ -280,7 +296,7 @@ fn keysym_to_egui_key(keysym: Keysym) -> Option<Key> {
         Keysym::_7 => Key::Num7,
         Keysym::_8 => Key::Num8,
         Keysym::_9 => Key::Num9,
-        
+
         // Function keys
         Keysym::F1 => Key::F1,
         Keysym::F2 => Key::F2,
@@ -294,7 +310,7 @@ fn keysym_to_egui_key(keysym: Keysym) -> Option<Key> {
         Keysym::F10 => Key::F10,
         Keysym::F11 => Key::F11,
         Keysym::F12 => Key::F12,
-        
+
         _ => return None,
     })
 }

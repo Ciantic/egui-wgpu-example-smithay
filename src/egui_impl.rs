@@ -552,7 +552,7 @@ impl<A: EguiAppData> SubsurfaceContainer for EguiSubsurface<A> {
 fn egui_to_cursor_shape(cursor: egui::CursorIcon) -> Shape {
     use egui::CursorIcon::*;
     use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::Shape as CursorShape;
-    
+
     match cursor {
         Default => CursorShape::Default,
         None => CursorShape::Default,

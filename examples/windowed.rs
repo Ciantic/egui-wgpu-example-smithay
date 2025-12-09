@@ -123,7 +123,7 @@ fn main() {
     window.set_title("wgpu wayland window");
     // GitHub does not let projects use the `org.github` domain but the `io.github`
     // domain is fine.
-    window.set_app_id("io.github.smithay.client-toolkit.WgpuExample");
+    window.set_app_id("io.github.ciantic.wayapp.WgpuExampleWindowed");
     window.set_min_size(Some((256, 256)));
     window.commit();
 

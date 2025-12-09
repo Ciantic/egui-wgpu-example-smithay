@@ -67,7 +67,7 @@ fn main() {
         &app.qh,
     );
     example_window.set_title("Example Window");
-    example_window.set_app_id("io.github.smithay.client-toolkit.EguiExample");
+    example_window.set_app_id("io.github.ciantic.wayapp.ExampleWindow");
     example_window.set_min_size(Some((256, 256)));
     example_window.commit();
 

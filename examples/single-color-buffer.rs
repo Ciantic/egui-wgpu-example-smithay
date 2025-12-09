@@ -60,7 +60,7 @@ fn main() {
         &app.qh,
     );
     example_window.set_title("Example Window");
-    example_window.set_app_id("io.github.smithay.client-toolkit.EguiExample");
+    example_window.set_app_id("io.github.ciantic.wayapp.SingleColorExample");
     example_window.set_min_size(Some((256, 256)));
     example_window.commit();
 
@@ -80,7 +80,7 @@ fn main() {
     );
     child_window.set_parent(Some(&example_window));
     child_window.set_title("Child Window");
-    child_window.set_app_id("io.github.smithay.client-toolkit.EguiExample.Child");
+    child_window.set_app_id("io.github.ciantic.wayapp.SingleColorExample.Child");
     child_window.set_min_size(Some((128, 128)));
     child_window.commit();
 

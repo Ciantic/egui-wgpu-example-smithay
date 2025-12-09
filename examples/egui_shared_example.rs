@@ -6,8 +6,6 @@ use smithay_client_toolkit::shell::wlr_layer::Anchor;
 use smithay_client_toolkit::shell::wlr_layer::KeyboardInteractivity;
 use smithay_client_toolkit::shell::wlr_layer::Layer;
 use smithay_client_toolkit::shell::wlr_layer::LayerSurface;
-use std::cell::RefCell;
-use std::rc::Rc;
 use wayapp::EguiAppData;
 use wayapp::EguiLayerSurface;
 use wayapp::get_init_app;
@@ -150,14 +148,9 @@ fn main() {
     layer_surface.set_size(512, 512);
     layer_surface.commit();
     let egui_app = EguiApp::new(layer_surface.clone());
-    let egui_layer_surface = Rc::new(RefCell::new(EguiLayerSurface::new(
-        layer_surface,
-        egui_app,
-        256,
-        256,
-    )));
+    let egui_layer_surface = EguiLayerSurface::new(layer_surface, egui_app, 256, 256);
 
-    app.push_layer_surface(egui_layer_surface.clone());
+    app.push_layer_surface(egui_layer_surface);
 
     app.run_blocking();
 }

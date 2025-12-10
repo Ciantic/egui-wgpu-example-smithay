@@ -194,6 +194,12 @@ impl WaylandToIcedInput {
             mods |= IcedModifiers::ALT;
         }
         self.modifiers = mods;
+
+        // Generate ModifiersChanged event so ICED widgets can update their internal
+        // state
+        self.events.push(IcedEvent::Keyboard(
+            iced::keyboard::Event::ModifiersChanged(mods),
+        ));
     }
 
     pub fn get_modifiers(&self) -> IcedModifiers {

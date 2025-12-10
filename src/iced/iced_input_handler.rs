@@ -3,6 +3,7 @@ use iced::event::Event as IcedEvent;
 use iced::keyboard::Key;
 use iced::keyboard::Location;
 use iced::keyboard::Modifiers as IcedModifiers;
+use iced::keyboard::key::Code;
 use iced::keyboard::key::Named;
 use iced::keyboard::key::NativeCode;
 use iced::keyboard::key::Physical;
@@ -135,120 +136,39 @@ impl WaylandToIcedInput {
     pub fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, is_repeat: bool) {
         trace!(
             "[INPUT] Keyboard event - keysym: {:?}, raw_code: {}, pressed: {}, repeat: {}, utf8: \
-             {:?}",
+             {:?}, modifiers: {:?}",
             event.keysym.raw(),
             event.raw_code,
             pressed,
             is_repeat,
-            event.utf8
+            event.utf8,
+            self.modifiers
         );
 
-        // Check for clipboard operations BEFORE general key handling
-        if pressed && !is_repeat && self.modifiers.contains(IcedModifiers::CTRL) {
-            match event.keysym {
-                Keysym::c => {
-                    self.events
-                        .push(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
-                            key: Key::Named(Named::Copy),
-                            location: keysym_location(event.keysym),
-                            modifiers: self.modifiers,
-                            text: None,
-                            modified_key: Key::Named(Named::Copy),
-                            physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
-                            repeat: false,
-                        }));
-                    return;
-                }
-                Keysym::x => {
-                    self.events
-                        .push(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
-                            key: Key::Named(Named::Cut),
-                            location: keysym_location(event.keysym),
-                            modifiers: self.modifiers,
-                            text: None,
-                            modified_key: Key::Named(Named::Cut),
-                            physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
-                            repeat: false,
-                        }));
-                    return;
-                }
-                Keysym::v => {
-                    self.events
-                        .push(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
-                            key: Key::Named(Named::Paste),
-                            location: keysym_location(event.keysym),
-                            modifiers: self.modifiers,
-                            text: None,
-                            modified_key: Key::Named(Named::Paste),
-                            physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
-                            repeat: false,
-                        }));
-                    return;
-                }
-                _ => (),
-            }
-        }
-
         let (key, location) = keysym_to_iced_key_and_loc(event.keysym);
+        let text = event.utf8.clone().map(SmolStr::new);
+        let physical_key = keysym_to_physical_key(event.keysym, event.raw_code);
 
-        // Process keyboard event if we have a named key OR if we have text to input
-        let text = if pressed || is_repeat {
-            let mut text = event.utf8.clone();
-            if is_repeat && text.is_none() {
-                text = self.last_key_utf8.clone();
-            }
-            if let Some(ref text) = text {
-                if !text.chars().any(|c| c.is_control()) {
-                    trace!("[INPUT] Text input: '{}'", text);
-                    Some(text.clone())
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        if let Some(ref t) = text {
-            self.last_key_utf8 = Some(t.clone());
-        }
-
-        // Convert text from String to SmolStr if available
-        let text_field = text.as_ref().map(|s| SmolStr::from(s.clone()));
-
-        // Only emit events if we have a named key or text to input
-        if !matches!(key, Key::Unidentified) || text_field.is_some() {
-            trace!(
-                "[INPUT] Mapped to Iced key: {:?}, repeat: {}, location: {:?}, has_text: {}",
-                key,
-                is_repeat,
-                location,
-                text_field.is_some()
-            );
-
-            let iced_event = if pressed {
-                IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
+        if pressed {
+            self.events
+                .push(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
                     key: key.clone(),
                     location,
                     modifiers: self.modifiers,
-                    text: text_field,
+                    text,
                     modified_key: key,
-                    physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
+                    physical_key,
                     repeat: is_repeat,
-                })
-            } else {
-                IcedEvent::Keyboard(iced::keyboard::Event::KeyReleased {
+                }));
+        } else {
+            self.events
+                .push(IcedEvent::Keyboard(iced::keyboard::Event::KeyReleased {
                     key,
                     location,
                     modifiers: self.modifiers,
-                    physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
+                    physical_key,
                     modified_key: Key::Unidentified,
-                })
-            };
-
-            self.events.push(iced_event);
+                }));
         }
     }
 
@@ -580,4 +500,207 @@ fn wayland_button_to_iced(button: u32) -> Option<IcedMouseButton> {
         0x112 => Some(IcedMouseButton::Middle),
         _ => None,
     }
+}
+
+fn keysym_to_physical_key(keysym: Keysym, raw_code: u32) -> Physical {
+    let code = match keysym {
+        // Digit keys
+        Keysym::_0 => Code::Digit0,
+        Keysym::_1 => Code::Digit1,
+        Keysym::_2 => Code::Digit2,
+        Keysym::_3 => Code::Digit3,
+        Keysym::_4 => Code::Digit4,
+        Keysym::_5 => Code::Digit5,
+        Keysym::_6 => Code::Digit6,
+        Keysym::_7 => Code::Digit7,
+        Keysym::_8 => Code::Digit8,
+        Keysym::_9 => Code::Digit9,
+
+        // Letter keys
+        Keysym::a | Keysym::A => Code::KeyA,
+        Keysym::b | Keysym::B => Code::KeyB,
+        Keysym::c | Keysym::C => Code::KeyC,
+        Keysym::d | Keysym::D => Code::KeyD,
+        Keysym::e | Keysym::E => Code::KeyE,
+        Keysym::f | Keysym::F => Code::KeyF,
+        Keysym::g | Keysym::G => Code::KeyG,
+        Keysym::h | Keysym::H => Code::KeyH,
+        Keysym::i | Keysym::I => Code::KeyI,
+        Keysym::j | Keysym::J => Code::KeyJ,
+        Keysym::k | Keysym::K => Code::KeyK,
+        Keysym::l | Keysym::L => Code::KeyL,
+        Keysym::m | Keysym::M => Code::KeyM,
+        Keysym::n | Keysym::N => Code::KeyN,
+        Keysym::o | Keysym::O => Code::KeyO,
+        Keysym::p | Keysym::P => Code::KeyP,
+        Keysym::q | Keysym::Q => Code::KeyQ,
+        Keysym::r | Keysym::R => Code::KeyR,
+        Keysym::s | Keysym::S => Code::KeyS,
+        Keysym::t | Keysym::T => Code::KeyT,
+        Keysym::u | Keysym::U => Code::KeyU,
+        Keysym::v | Keysym::V => Code::KeyV,
+        Keysym::w | Keysym::W => Code::KeyW,
+        Keysym::x | Keysym::X => Code::KeyX,
+        Keysym::y | Keysym::Y => Code::KeyY,
+        Keysym::z | Keysym::Z => Code::KeyZ,
+
+        // Punctuation
+        Keysym::grave => Code::Backquote,
+        Keysym::minus => Code::Minus,
+        Keysym::equal => Code::Equal,
+        Keysym::bracketleft => Code::BracketLeft,
+        Keysym::bracketright => Code::BracketRight,
+        Keysym::backslash => Code::Backslash,
+        Keysym::semicolon => Code::Semicolon,
+        Keysym::apostrophe => Code::Quote,
+        Keysym::comma => Code::Comma,
+        Keysym::period => Code::Period,
+        Keysym::slash => Code::Slash,
+
+        // Whitespace and control
+        Keysym::space => Code::Space,
+        Keysym::Tab => Code::Tab,
+        Keysym::Return => Code::Enter,
+        Keysym::BackSpace => Code::Backspace,
+        Keysym::Delete => Code::Delete,
+        Keysym::Escape => Code::Escape,
+
+        // Modifiers
+        Keysym::Shift_L => Code::ShiftLeft,
+        Keysym::Shift_R => Code::ShiftRight,
+        Keysym::Control_L => Code::ControlLeft,
+        Keysym::Control_R => Code::ControlRight,
+        Keysym::Alt_L => Code::AltLeft,
+        Keysym::Alt_R => Code::AltRight,
+        Keysym::Super_L => Code::SuperLeft,
+        Keysym::Super_R => Code::SuperRight,
+        Keysym::Caps_Lock => Code::CapsLock,
+        Keysym::Num_Lock => Code::NumLock,
+        Keysym::Scroll_Lock => Code::ScrollLock,
+
+        // Navigation
+        Keysym::Home => Code::Home,
+        Keysym::End => Code::End,
+        Keysym::Page_Up => Code::PageUp,
+        Keysym::Page_Down => Code::PageDown,
+        Keysym::Left => Code::ArrowLeft,
+        Keysym::Right => Code::ArrowRight,
+        Keysym::Up => Code::ArrowUp,
+        Keysym::Down => Code::ArrowDown,
+
+        // Insert/Print
+        Keysym::Insert => Code::Insert,
+        Keysym::Print => Code::PrintScreen,
+        Keysym::Sys_Req => Code::PrintScreen,
+
+        // Function keys
+        Keysym::F1 => Code::F1,
+        Keysym::F2 => Code::F2,
+        Keysym::F3 => Code::F3,
+        Keysym::F4 => Code::F4,
+        Keysym::F5 => Code::F5,
+        Keysym::F6 => Code::F6,
+        Keysym::F7 => Code::F7,
+        Keysym::F8 => Code::F8,
+        Keysym::F9 => Code::F9,
+        Keysym::F10 => Code::F10,
+        Keysym::F11 => Code::F11,
+        Keysym::F12 => Code::F12,
+        Keysym::F13 => Code::F13,
+        Keysym::F14 => Code::F14,
+        Keysym::F15 => Code::F15,
+        Keysym::F16 => Code::F16,
+        Keysym::F17 => Code::F17,
+        Keysym::F18 => Code::F18,
+        Keysym::F19 => Code::F19,
+        Keysym::F20 => Code::F20,
+        Keysym::F21 => Code::F21,
+        Keysym::F22 => Code::F22,
+        Keysym::F23 => Code::F23,
+        Keysym::F24 => Code::F24,
+        Keysym::F25 => Code::F25,
+        Keysym::F26 => Code::F26,
+        Keysym::F27 => Code::F27,
+        Keysym::F28 => Code::F28,
+        Keysym::F29 => Code::F29,
+        Keysym::F30 => Code::F30,
+        Keysym::F31 => Code::F31,
+        Keysym::F32 => Code::F32,
+        Keysym::F33 => Code::F33,
+        Keysym::F34 => Code::F34,
+        Keysym::F35 => Code::F35,
+
+        // Keypad
+        Keysym::KP_0 => Code::Numpad0,
+        Keysym::KP_1 => Code::Numpad1,
+        Keysym::KP_2 => Code::Numpad2,
+        Keysym::KP_3 => Code::Numpad3,
+        Keysym::KP_4 => Code::Numpad4,
+        Keysym::KP_5 => Code::Numpad5,
+        Keysym::KP_6 => Code::Numpad6,
+        Keysym::KP_7 => Code::Numpad7,
+        Keysym::KP_8 => Code::Numpad8,
+        Keysym::KP_9 => Code::Numpad9,
+        Keysym::KP_Decimal => Code::NumpadDecimal,
+        Keysym::KP_Divide => Code::NumpadDivide,
+        Keysym::KP_Multiply => Code::NumpadMultiply,
+        Keysym::KP_Subtract => Code::NumpadSubtract,
+        Keysym::KP_Add => Code::NumpadAdd,
+        Keysym::KP_Enter => Code::NumpadEnter,
+        Keysym::KP_Equal => Code::NumpadEqual,
+
+        // Pause/Break
+        Keysym::Pause => Code::Pause,
+        Keysym::Break => Code::Pause,
+
+        // Media keys
+        Keysym::XF86_AudioMute => Code::AudioVolumeMute,
+        Keysym::XF86_AudioLowerVolume => Code::AudioVolumeDown,
+        Keysym::XF86_AudioRaiseVolume => Code::AudioVolumeUp,
+        Keysym::XF86_AudioPlay => Code::MediaPlayPause,
+        Keysym::XF86_AudioStop => Code::MediaStop,
+        Keysym::XF86_AudioPrev => Code::MediaTrackPrevious,
+        Keysym::XF86_AudioNext => Code::MediaTrackNext,
+
+        // Browser keys
+        Keysym::XF86_Back => Code::BrowserBack,
+        Keysym::XF86_Forward => Code::BrowserForward,
+        Keysym::XF86_Refresh => Code::BrowserRefresh,
+        Keysym::XF86_Stop => Code::BrowserStop,
+        Keysym::XF86_Search => Code::BrowserSearch,
+        Keysym::XF86_HomePage => Code::BrowserHome,
+        Keysym::XF86_Favorites => Code::BrowserFavorites,
+
+        // Power/Sleep
+        Keysym::XF86_PowerOff => Code::Power,
+        Keysym::XF86_Sleep => Code::Sleep,
+        Keysym::XF86_WakeUp => Code::WakeUp,
+
+        // Application keys
+        Keysym::XF86_Calculator => Code::LaunchApp2,
+        Keysym::XF86_Mail => Code::LaunchMail,
+        Keysym::XF86_MyComputer => Code::LaunchApp1,
+        Keysym::XF86_Music => Code::MediaSelect,
+        Keysym::XF86_Video => Code::LaunchApp2,
+
+        // Edit keys
+        Keysym::XF86_Copy => Code::Copy,
+        Keysym::XF86_Cut => Code::Cut,
+        Keysym::XF86_Paste => Code::Paste,
+
+        // Japanese
+        Keysym::Henkan_Mode => Code::Convert,
+        Keysym::Muhenkan => Code::NonConvert,
+        Keysym::Kanji => Code::Lang2,
+        Keysym::Hiragana => Code::Lang4,
+        Keysym::Katakana => Code::Lang3,
+
+        // Context menu
+        Keysym::Menu => Code::ContextMenu,
+
+        // Everything else returns unidentified
+        _ => return Physical::Unidentified(NativeCode::Xkb(raw_code)),
+    };
+
+    Physical::Code(code)
 }

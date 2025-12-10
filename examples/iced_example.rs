@@ -54,7 +54,7 @@ impl IcedAppData for Counter {
 }
 
 fn main() {
-    unsafe { std::env::set_var("RUST_LOG", "debug") };
+    // unsafe { std::env::set_var("RUST_LOG", "wayapp=trace") };
     env_logger::init();
     let app = get_init_app();
 

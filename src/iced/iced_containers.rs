@@ -42,10 +42,10 @@ use wayland_client::Proxy;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface::WlSurface;
 
-pub trait IcedAppData: 'static {
-    type Message: std::fmt::Debug + Clone + Send + 'static;
+pub trait IcedAppData {
+    type Message: std::fmt::Debug + Clone + Send;
 
-    fn view(&self) -> iced::Element<Self::Message>;
+    fn view(&'_ self) -> iced::Element<'_, Self::Message>;
     fn update(&mut self, message: Self::Message);
 }
 

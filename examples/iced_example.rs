@@ -23,7 +23,7 @@ enum Message {
 impl IcedAppData for Counter {
     type Message = Message;
 
-    fn view(&self) -> Element<Message> {
+    fn view(&'_ self) -> Element<'_, Message> {
         column![
             button("Increment").on_press(Message::Increment),
             text(self.value).size(50),

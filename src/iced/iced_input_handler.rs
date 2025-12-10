@@ -157,11 +157,11 @@ impl WaylandToIcedInput {
         } else {
             self.events
                 .push(IcedEvent::Keyboard(iced::keyboard::Event::KeyReleased {
-                    key,
+                    key: key.clone(),
                     location,
                     modifiers: self.modifiers,
                     physical_key,
-                    modified_key: Key::Unidentified,
+                    modified_key: key,
                 }));
         }
     }

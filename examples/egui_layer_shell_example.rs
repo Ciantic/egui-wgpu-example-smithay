@@ -1,3 +1,4 @@
+// cargo run --example egui_layer_shell_example --features egui-wgpu
 use egui::CentralPanel;
 use egui::Context;
 use log::debug;

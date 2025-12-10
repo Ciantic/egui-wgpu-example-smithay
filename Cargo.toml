@@ -20,10 +20,10 @@ wayland-protocols-wlr = "0.3.9"
 
 # Used only by egui/wgpu backend
 pollster = "0.4.0"
-egui = "0.33.2"
-egui-wgpu = "0.33.2"
-raw-window-handle = "0.6.2"
-wgpu = "27.0.1"
+egui = { version = "0.33.2", optional = true }
+egui-wgpu = { version = "0.33.2", optional = true }
+raw-window-handle = { version = "0.6.2", optional = true }
+wgpu = { version = "27.0.1", optional = true }
 
 # Used only by iced/wgpu backend
 iced = { version = "0.14.0", default-features = false, features = [
@@ -32,17 +32,33 @@ iced = { version = "0.14.0", default-features = false, features = [
     "tiny-skia",
     "image",
     "wayland",
-] }
-iced_core = "0.14.0"
-iced_futures = "0.14.0"
-iced_graphics = "0.14.0"
-iced_renderer = "0.14.0"
-iced_runtime = "0.14.0"
-iced_tiny_skia = "0.14.0"
-iced_wgpu = "0.14.0"
+], optional = true }
+iced_core = { version = "0.14.0", optional = true }
+iced_futures = { version = "0.14.0", optional = true }
+iced_graphics = { version = "0.14.0", optional = true }
+iced_renderer = { version = "0.14.0", optional = true }
+iced_runtime = { version = "0.14.0", optional = true }
+iced_tiny_skia = { version = "0.14.0", optional = true }
+iced_wgpu = { version = "0.14.0", optional = true }
 
 [dev-dependencies]
 env_logger = "0.11.8"
+
+[features]
+default = []
+egui-wgpu = ["dep:egui", "dep:egui-wgpu", "dep:raw-window-handle", "dep:wgpu"]
+iced-wgpu = [
+    "dep:iced",
+    "dep:iced_core",
+    "dep:iced_futures",
+    "dep:iced_graphics",
+    "dep:iced_renderer",
+    "dep:iced_runtime",
+    "dep:iced_tiny_skia",
+    "dep:iced_wgpu",
+    "dep:raw-window-handle",
+    "dep:wgpu",
+]
 
 [lib]
 name = "wayapp"

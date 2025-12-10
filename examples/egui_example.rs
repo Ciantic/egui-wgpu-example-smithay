@@ -1,3 +1,4 @@
+// cargo run --example egui_example --features egui-wgpu
 use egui::CentralPanel;
 use egui::Context;
 use smithay_client_toolkit::shell::WaylandSurface;

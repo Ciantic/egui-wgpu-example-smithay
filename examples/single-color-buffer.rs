@@ -1,3 +1,4 @@
+// cargo run --example single-color-buffer
 use log::trace;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shell::wlr_layer::Anchor;

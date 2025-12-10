@@ -1,3 +1,4 @@
+// cargo run --example iced_example --features iced-wgpu
 use iced::Element;
 use iced::widget::button;
 use iced::widget::column;

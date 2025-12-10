@@ -12,6 +12,7 @@ edition = "2024"
 log = "0.4.28"
 smithay-client-toolkit = "0.20.0"
 smithay-clipboard = "0.7"
+smol_str = "0.2"
 wayland-backend = { version = "0.3.11", features = ["client_system"] }
 wayland-client = "0.31.11"
 wayland-protocols = "0.32.9"
@@ -23,6 +24,21 @@ egui = "0.33.2"
 egui-wgpu = "0.33.2"
 raw-window-handle = "0.6.2"
 wgpu = "27.0.1"
+
+# Used only by iced/wgpu backend
+iced = { version = "0.14.0", default-features = false, features = [
+    "wgpu",
+    "tokio",
+    "tiny-skia",
+    "image",
+    "wayland",
+] }
+iced_futures = "0.14.0"
+iced_graphics = "0.14.0"
+iced_renderer = "0.14.0"
+iced_runtime = "0.14.0"
+iced_tiny_skia = "0.14.0"
+iced_wgpu = "0.14.0"
 
 [dev-dependencies]
 env_logger = "0.11.8"

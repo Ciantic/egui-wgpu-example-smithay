@@ -157,20 +157,24 @@ impl WaylandToEguiInput {
                 repeat: is_repeat,
                 modifiers: self.modifiers,
             });
-            if pressed || is_repeat {
-                let text = event.utf8.clone().or(self.last_key_utf8.clone());
-                if let Some(text) = text {
-                    if !text.chars().any(|c| c.is_control()) {
-                        trace!("[INPUT] Text input: '{}'", text);
-                        self.events.push(Event::Text(text.clone()));
-                    }
-                }
-            }
         } else {
             trace!(
                 "[INPUT] No EGUI key mapping for keysym: {:?}",
                 event.keysym.raw()
             );
+        }
+
+        if pressed || is_repeat {
+            let mut text = event.utf8.clone();
+            if is_repeat && text.is_none() {
+                text = self.last_key_utf8.clone();
+            }
+            if let Some(text) = text {
+                if !text.chars().any(|c| c.is_control()) {
+                    trace!("[INPUT] Text input: '{}'", text);
+                    self.events.push(Event::Text(text.clone()));
+                }
+            }
         }
 
         if event.utf8.is_some() {
@@ -250,24 +254,53 @@ fn wayland_button_to_egui(button: u32) -> Option<PointerButton> {
 
 fn keysym_to_egui_key(keysym: Keysym) -> Option<Key> {
     Some(match keysym {
+        // Commands:
+        Keysym::downarrow | Keysym::Down => Key::ArrowDown,
+        Keysym::leftarrow | Keysym::Left => Key::ArrowLeft,
+        Keysym::rightarrow | Keysym::Right => Key::ArrowRight,
+        Keysym::uparrow | Keysym::Up => Key::ArrowUp,
         Keysym::Escape => Key::Escape,
-        Keysym::Return | Keysym::KP_Enter => Key::Enter,
         Keysym::Tab => Key::Tab,
         Keysym::BackSpace => Key::Backspace,
+        Keysym::Return => Key::Enter,
         Keysym::Insert => Key::Insert,
         Keysym::Delete => Key::Delete,
         Keysym::Home => Key::Home,
         Keysym::End => Key::End,
-        Keysym::Page_Up => Key::PageUp,
-        Keysym::Page_Down => Key::PageDown,
-        Keysym::Left => Key::ArrowLeft,
-        Keysym::Right => Key::ArrowRight,
-        Keysym::Up => Key::ArrowUp,
-        Keysym::Down => Key::ArrowDown,
-
+        Keysym::Prior => Key::PageUp,
+        Keysym::Next => Key::PageDown,
+        // Punctuation:
         Keysym::space => Key::Space,
-
-        // Letters
+        Keysym::colon => Key::Colon,
+        Keysym::comma => Key::Comma,
+        Keysym::minus => Key::Minus,
+        Keysym::period => Key::Period,
+        Keysym::plus => Key::Plus,
+        Keysym::equal => Key::Equals,
+        Keysym::semicolon => Key::Semicolon,
+        Keysym::bracketleft => Key::OpenBracket,
+        Keysym::bracketright => Key::CloseBracket,
+        Keysym::braceleft => Key::OpenCurlyBracket,
+        Keysym::braceright => Key::CloseCurlyBracket,
+        Keysym::grave => Key::Backtick,
+        Keysym::backslash => Key::Backslash,
+        Keysym::slash => Key::Slash,
+        Keysym::bar => Key::Pipe,
+        Keysym::question => Key::Questionmark,
+        Keysym::exclam => Key::Exclamationmark,
+        Keysym::apostrophe => Key::Quote,
+        // Digits:
+        Keysym::_0 => Key::Num0,
+        Keysym::_1 => Key::Num1,
+        Keysym::_2 => Key::Num2,
+        Keysym::_3 => Key::Num3,
+        Keysym::_4 => Key::Num4,
+        Keysym::_5 => Key::Num5,
+        Keysym::_6 => Key::Num6,
+        Keysym::_7 => Key::Num7,
+        Keysym::_8 => Key::Num8,
+        Keysym::_9 => Key::Num9,
+        // Letters:
         Keysym::a => Key::A,
         Keysym::b => Key::B,
         Keysym::c => Key::C,
@@ -294,20 +327,7 @@ fn keysym_to_egui_key(keysym: Keysym) -> Option<Key> {
         Keysym::x => Key::X,
         Keysym::y => Key::Y,
         Keysym::z => Key::Z,
-
-        // Numbers
-        Keysym::_0 => Key::Num0,
-        Keysym::_1 => Key::Num1,
-        Keysym::_2 => Key::Num2,
-        Keysym::_3 => Key::Num3,
-        Keysym::_4 => Key::Num4,
-        Keysym::_5 => Key::Num5,
-        Keysym::_6 => Key::Num6,
-        Keysym::_7 => Key::Num7,
-        Keysym::_8 => Key::Num8,
-        Keysym::_9 => Key::Num9,
-
-        // Function keys
+        // Function keys:
         Keysym::F1 => Key::F1,
         Keysym::F2 => Key::F2,
         Keysym::F3 => Key::F3,
@@ -320,7 +340,31 @@ fn keysym_to_egui_key(keysym: Keysym) -> Option<Key> {
         Keysym::F10 => Key::F10,
         Keysym::F11 => Key::F11,
         Keysym::F12 => Key::F12,
-
+        Keysym::F13 => Key::F13,
+        Keysym::F14 => Key::F14,
+        Keysym::F15 => Key::F15,
+        Keysym::F16 => Key::F16,
+        Keysym::F17 => Key::F17,
+        Keysym::F18 => Key::F18,
+        Keysym::F19 => Key::F19,
+        Keysym::F20 => Key::F20,
+        Keysym::F21 => Key::F21,
+        Keysym::F22 => Key::F22,
+        Keysym::F23 => Key::F23,
+        Keysym::F24 => Key::F24,
+        Keysym::F25 => Key::F25,
+        Keysym::F26 => Key::F26,
+        Keysym::F27 => Key::F27,
+        Keysym::F28 => Key::F28,
+        Keysym::F29 => Key::F29,
+        Keysym::F30 => Key::F30,
+        Keysym::F31 => Key::F31,
+        Keysym::F32 => Key::F32,
+        Keysym::F33 => Key::F33,
+        Keysym::F34 => Key::F34,
+        Keysym::F35 => Key::F35,
+        // Navigation keys:
+        // Keysym::BrowserBack => Key::BrowserBack,
         _ => return None,
     })
 }

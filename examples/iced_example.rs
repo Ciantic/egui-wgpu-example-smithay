@@ -3,6 +3,7 @@ use iced::Element;
 use iced::widget::button;
 use iced::widget::column;
 use iced::widget::text;
+use iced::widget::text_input;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shell::xdg::window::WindowDecorations;
 use wayapp::IcedAppData;
@@ -12,12 +13,14 @@ use wayapp::get_init_app;
 #[derive(Default)]
 struct Counter {
     value: i64,
+    input_value: String,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Message {
     Increment,
     Decrement,
+    InputChanged(String),
 }
 
 impl IcedAppData for Counter {
@@ -28,6 +31,8 @@ impl IcedAppData for Counter {
             button("Increment").on_press(Message::Increment),
             text(self.value).size(50),
             button("Decrement").on_press(Message::Decrement),
+            text_input("Enter text...", &self.input_value).on_input(Message::InputChanged),
+            text(format!("You entered: {}", self.input_value)),
         ]
         .padding(20)
         .into()
@@ -40,6 +45,9 @@ impl IcedAppData for Counter {
             }
             Message::Decrement => {
                 self.value -= 1;
+            }
+            Message::InputChanged(new_value) => {
+                self.input_value = new_value;
             }
         }
     }

@@ -191,37 +191,42 @@ impl WaylandToIcedInput {
 
         let (key, location) = keysym_to_iced_key_and_loc(event.keysym);
 
-        if !matches!(key, Key::Unidentified) {
-            trace!(
-                "[INPUT] Mapped to Iced key: {:?}, repeat: {}, location: {:?}",
-                key, is_repeat, location
-            );
-
-            let text = if pressed || is_repeat {
-                let mut text = event.utf8.clone();
-                if is_repeat && text.is_none() {
-                    text = self.last_key_utf8.clone();
-                }
-                if let Some(ref text) = text {
-                    if !text.chars().any(|c| c.is_control()) {
-                        trace!("[INPUT] Text input: '{}'", text);
-                        Some(text.clone())
-                    } else {
-                        None
-                    }
+        // Process keyboard event if we have a named key OR if we have text to input
+        let text = if pressed || is_repeat {
+            let mut text = event.utf8.clone();
+            if is_repeat && text.is_none() {
+                text = self.last_key_utf8.clone();
+            }
+            if let Some(ref text) = text {
+                if !text.chars().any(|c| c.is_control()) {
+                    trace!("[INPUT] Text input: '{}'", text);
+                    Some(text.clone())
                 } else {
                     None
                 }
             } else {
                 None
-            };
-
-            if let Some(ref t) = text {
-                self.last_key_utf8 = Some(t.clone());
             }
+        } else {
+            None
+        };
 
-            // Convert text from String to SmolStr if available
-            let text_field = text.as_ref().map(|s| SmolStr::from(s.clone()));
+        if let Some(ref t) = text {
+            self.last_key_utf8 = Some(t.clone());
+        }
+
+        // Convert text from String to SmolStr if available
+        let text_field = text.as_ref().map(|s| SmolStr::from(s.clone()));
+
+        // Only emit events if we have a named key or text to input
+        if !matches!(key, Key::Unidentified) || text_field.is_some() {
+            trace!(
+                "[INPUT] Mapped to Iced key: {:?}, repeat: {}, location: {:?}, has_text: {}",
+                key,
+                is_repeat,
+                location,
+                text_field.is_some()
+            );
 
             let iced_event = if pressed {
                 IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {

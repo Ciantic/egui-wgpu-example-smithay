@@ -3387,6 +3387,7 @@ dependencies = [
  "egui-wgpu",
  "env_logger",
  "iced",
+ "iced_core",
  "iced_futures",
  "iced_graphics",
  "iced_renderer",

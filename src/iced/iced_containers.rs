@@ -12,9 +12,14 @@ use crate::get_app;
 use iced::Color;
 use iced::Font;
 use iced::Pixels;
+use iced::Size;
+use iced::Theme;
+use iced::mouse;
+use iced_core::renderer::Style;
 use iced_graphics::Viewport;
+use iced_renderer::Renderer;
+use iced_runtime::user_interface;
 use iced_wgpu::Engine;
-use iced_wgpu::Renderer;
 use log::trace;
 use pollster::block_on;
 use raw_window_handle::RawDisplayHandle;
@@ -37,25 +42,33 @@ use wayland_client::Proxy;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface::WlSurface;
 
-struct IcedSurfaceState {
+pub trait IcedAppData: 'static {
+    type Message: std::fmt::Debug + Clone + Send + 'static;
+
+    fn view(&self) -> iced::Element<Self::Message>;
+    fn update(&mut self, message: Self::Message);
+}
+
+struct IcedSurfaceState<A: IcedAppData> {
     wl_surface: WlSurface,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    #[allow(dead_code)]
     engine: Engine,
     renderer: Renderer,
     input_state: WaylandToIcedInput,
+    iced_app: A,
     queue_handle: QueueHandle<Application>,
     width: u32,
     height: u32,
     scale_factor: i32,
     surface_config: Option<wgpu::SurfaceConfiguration>,
     output_format: wgpu::TextureFormat,
+    cache: user_interface::Cache,
 }
 
-impl IcedSurfaceState {
-    fn new(wl_surface: WlSurface) -> Self {
+impl<A: IcedAppData> IcedSurfaceState<A> {
+    fn new(wl_surface: WlSurface, iced_app: A) -> Self {
         let app = get_app();
         let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
             NonNull::new(app.conn.backend().display_ptr() as *mut _)
@@ -106,7 +119,8 @@ impl IcedSurfaceState {
             iced_graphics::Shell::headless(),
         );
 
-        let renderer = Renderer::new(engine.clone(), Font::DEFAULT, Pixels(16.0));
+        let wgpu_renderer = iced_wgpu::Renderer::new(engine.clone(), Font::DEFAULT, Pixels(16.0));
+        let renderer = iced_renderer::Renderer::Primary(wgpu_renderer);
 
         let clipboard = unsafe { Clipboard::new(app.conn.display().id().as_ptr() as *mut _) };
         let input_state = WaylandToIcedInput::new(clipboard);
@@ -119,12 +133,14 @@ impl IcedSurfaceState {
             engine,
             renderer,
             input_state,
+            iced_app,
             queue_handle: app.qh.clone(),
             width: 256,
             height: 256,
             scale_factor: 1,
             surface_config: None,
             output_format,
+            cache: user_interface::Cache::default(),
         }
     }
 
@@ -189,39 +205,49 @@ impl IcedSurfaceState {
         let texture_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        {
-            let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("iced clear pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &texture_view,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-        }
 
+        // Create viewport
+        let physical_width = self.width.saturating_mul(self.physical_scale());
+        let physical_height = self.height.saturating_mul(self.physical_scale());
         let viewport = Viewport::with_physical_size(
-            iced::Size::new(self.width, self.height),
+            Size::new(physical_width, physical_height),
             self.physical_scale() as f32,
         );
 
-        // Render the viewport
-        self.renderer.present(
-            Some(Color::BLACK),
-            self.output_format,
-            &texture_view,
-            &viewport,
+        // Get the view element from the app
+        let element = self.iced_app.view();
+
+        // Build user interface
+        let mut user_interface = user_interface::UserInterface::build(
+            element,
+            viewport.logical_size(),
+            std::mem::take(&mut self.cache),
+            &mut self.renderer,
         );
 
-        self.queue.submit(Some(encoder.finish()));
+        // Draw the user interface
+        user_interface.draw(
+            &mut self.renderer,
+            &Theme::Dark,
+            &Style {
+                text_color: Color::WHITE,
+            },
+            mouse::Cursor::Unavailable,
+        );
+
+        // Store cache for next frame
+        self.cache = user_interface.into_cache();
+
+        // Present the rendered frame - need to extract wgpu renderer
+        if let iced_renderer::Renderer::Primary(wgpu_renderer) = &mut self.renderer {
+            wgpu_renderer.present(
+                Some(Color::BLACK),
+                self.output_format,
+                &texture_view,
+                &viewport,
+            );
+        }
+
         surface_texture.present();
 
         // Request next frame
@@ -252,21 +278,21 @@ impl IcedSurfaceState {
     }
 }
 
-pub struct IcedWindow {
+pub struct IcedWindow<A: IcedAppData> {
     pub window: Window,
-    surface: IcedSurfaceState,
+    surface: IcedSurfaceState<A>,
 }
 
-impl IcedWindow {
-    pub fn new(window: Window, width: u32, height: u32) -> Self {
-        let mut surface = IcedSurfaceState::new(window.wl_surface().clone());
+impl<A: IcedAppData> IcedWindow<A> {
+    pub fn new(window: Window, iced_app: A, width: u32, height: u32) -> Self {
+        let mut surface = IcedSurfaceState::new(window.wl_surface().clone(), iced_app);
         surface.width = width;
         surface.height = height;
         Self { window, surface }
     }
 }
 
-impl CompositorHandlerContainer for IcedWindow {
+impl<A: IcedAppData> CompositorHandlerContainer for IcedWindow<A> {
     fn scale_factor_changed(&mut self, new_factor: i32) {
         self.surface.scale_factor_changed(new_factor);
     }
@@ -276,7 +302,7 @@ impl CompositorHandlerContainer for IcedWindow {
     }
 }
 
-impl KeyboardHandlerContainer for IcedWindow {
+impl<A: IcedAppData> KeyboardHandlerContainer for IcedWindow<A> {
     fn enter(&mut self) {
         self.surface.handle_keyboard_enter();
     }
@@ -302,19 +328,19 @@ impl KeyboardHandlerContainer for IcedWindow {
     }
 }
 
-impl PointerHandlerContainer for IcedWindow {
+impl<A: IcedAppData> PointerHandlerContainer for IcedWindow<A> {
     fn pointer_frame(&mut self, event: &PointerEvent) {
         self.surface.handle_pointer_event(event);
     }
 }
 
-impl BaseTrait for IcedWindow {
+impl<A: IcedAppData> BaseTrait for IcedWindow<A> {
     fn get_object_id(&self) -> wayland_backend::client::ObjectId {
         self.window.wl_surface().id()
     }
 }
 
-impl WindowContainer for IcedWindow {
+impl<A: IcedAppData> WindowContainer for IcedWindow<A> {
     fn configure(&mut self, configure: &WindowConfigure) {
         let width = configure.new_size.0.map_or(256, |size| size.get());
         let height = configure.new_size.1.map_or(256, |size| size.get());
@@ -325,14 +351,14 @@ impl WindowContainer for IcedWindow {
     }
 }
 
-pub struct IcedLayerSurface {
+pub struct IcedLayerSurface<A: IcedAppData> {
     pub layer_surface: LayerSurface,
-    surface: IcedSurfaceState,
+    surface: IcedSurfaceState<A>,
 }
 
-impl IcedLayerSurface {
-    pub fn new(layer_surface: LayerSurface, width: u32, height: u32) -> Self {
-        let mut surface = IcedSurfaceState::new(layer_surface.wl_surface().clone());
+impl<A: IcedAppData> IcedLayerSurface<A> {
+    pub fn new(layer_surface: LayerSurface, iced_app: A, width: u32, height: u32) -> Self {
+        let mut surface = IcedSurfaceState::new(layer_surface.wl_surface().clone(), iced_app);
         surface.width = width;
         surface.height = height;
         Self {
@@ -342,7 +368,7 @@ impl IcedLayerSurface {
     }
 }
 
-impl CompositorHandlerContainer for IcedLayerSurface {
+impl<A: IcedAppData> CompositorHandlerContainer for IcedLayerSurface<A> {
     fn scale_factor_changed(&mut self, new_factor: i32) {
         self.surface.scale_factor_changed(new_factor);
     }
@@ -352,7 +378,7 @@ impl CompositorHandlerContainer for IcedLayerSurface {
     }
 }
 
-impl KeyboardHandlerContainer for IcedLayerSurface {
+impl<A: IcedAppData> KeyboardHandlerContainer for IcedLayerSurface<A> {
     fn enter(&mut self) {
         self.surface.handle_keyboard_enter();
     }
@@ -378,19 +404,19 @@ impl KeyboardHandlerContainer for IcedLayerSurface {
     }
 }
 
-impl PointerHandlerContainer for IcedLayerSurface {
+impl<A: IcedAppData> PointerHandlerContainer for IcedLayerSurface<A> {
     fn pointer_frame(&mut self, event: &PointerEvent) {
         self.surface.handle_pointer_event(event);
     }
 }
 
-impl BaseTrait for IcedLayerSurface {
+impl<A: IcedAppData> BaseTrait for IcedLayerSurface<A> {
     fn get_object_id(&self) -> wayland_backend::client::ObjectId {
         self.layer_surface.wl_surface().id()
     }
 }
 
-impl LayerSurfaceContainer for IcedLayerSurface {
+impl<A: IcedAppData> LayerSurfaceContainer for IcedLayerSurface<A> {
     fn configure(&mut self, config: &LayerSurfaceConfigure) {
         self.layer_surface
             .wl_surface()
@@ -399,21 +425,21 @@ impl LayerSurfaceContainer for IcedLayerSurface {
     }
 }
 
-pub struct IcedPopup {
+pub struct IcedPopup<A: IcedAppData> {
     pub popup: Popup,
-    surface: IcedSurfaceState,
+    surface: IcedSurfaceState<A>,
 }
 
-impl IcedPopup {
-    pub fn new(popup: Popup, width: u32, height: u32) -> Self {
-        let mut surface = IcedSurfaceState::new(popup.wl_surface().clone());
+impl<A: IcedAppData> IcedPopup<A> {
+    pub fn new(popup: Popup, iced_app: A, width: u32, height: u32) -> Self {
+        let mut surface = IcedSurfaceState::new(popup.wl_surface().clone(), iced_app);
         surface.width = width;
         surface.height = height;
         Self { popup, surface }
     }
 }
 
-impl CompositorHandlerContainer for IcedPopup {
+impl<A: IcedAppData> CompositorHandlerContainer for IcedPopup<A> {
     fn scale_factor_changed(&mut self, new_factor: i32) {
         self.surface.scale_factor_changed(new_factor);
     }
@@ -423,7 +449,7 @@ impl CompositorHandlerContainer for IcedPopup {
     }
 }
 
-impl KeyboardHandlerContainer for IcedPopup {
+impl<A: IcedAppData> KeyboardHandlerContainer for IcedPopup<A> {
     fn enter(&mut self) {
         self.surface.handle_keyboard_enter();
     }
@@ -449,19 +475,19 @@ impl KeyboardHandlerContainer for IcedPopup {
     }
 }
 
-impl PointerHandlerContainer for IcedPopup {
+impl<A: IcedAppData> PointerHandlerContainer for IcedPopup<A> {
     fn pointer_frame(&mut self, event: &PointerEvent) {
         self.surface.handle_pointer_event(event);
     }
 }
 
-impl BaseTrait for IcedPopup {
+impl<A: IcedAppData> BaseTrait for IcedPopup<A> {
     fn get_object_id(&self) -> wayland_backend::client::ObjectId {
         self.popup.wl_surface().id()
     }
 }
 
-impl PopupContainer for IcedPopup {
+impl<A: IcedAppData> PopupContainer for IcedPopup<A> {
     fn configure(&mut self, config: &PopupConfigure) {
         self.popup
             .wl_surface()
@@ -473,14 +499,14 @@ impl PopupContainer for IcedPopup {
     fn done(&mut self) {}
 }
 
-pub struct IcedSubsurface {
+pub struct IcedSubsurface<A: IcedAppData> {
     pub wl_surface: WlSurface,
-    surface: IcedSurfaceState,
+    surface: IcedSurfaceState<A>,
 }
 
-impl IcedSubsurface {
-    pub fn new(wl_surface: WlSurface, width: u32, height: u32) -> Self {
-        let mut surface = IcedSurfaceState::new(wl_surface.clone());
+impl<A: IcedAppData> IcedSubsurface<A> {
+    pub fn new(wl_surface: WlSurface, iced_app: A, width: u32, height: u32) -> Self {
+        let mut surface = IcedSurfaceState::new(wl_surface.clone(), iced_app);
         surface.width = width;
         surface.height = height;
         Self {
@@ -490,7 +516,7 @@ impl IcedSubsurface {
     }
 }
 
-impl CompositorHandlerContainer for IcedSubsurface {
+impl<A: IcedAppData> CompositorHandlerContainer for IcedSubsurface<A> {
     fn scale_factor_changed(&mut self, new_factor: i32) {
         self.surface.scale_factor_changed(new_factor);
     }
@@ -500,7 +526,7 @@ impl CompositorHandlerContainer for IcedSubsurface {
     }
 }
 
-impl KeyboardHandlerContainer for IcedSubsurface {
+impl<A: IcedAppData> KeyboardHandlerContainer for IcedSubsurface<A> {
     fn enter(&mut self) {
         self.surface.handle_keyboard_enter();
     }
@@ -526,19 +552,19 @@ impl KeyboardHandlerContainer for IcedSubsurface {
     }
 }
 
-impl PointerHandlerContainer for IcedSubsurface {
+impl<A: IcedAppData> PointerHandlerContainer for IcedSubsurface<A> {
     fn pointer_frame(&mut self, event: &PointerEvent) {
         self.surface.handle_pointer_event(event);
     }
 }
 
-impl BaseTrait for IcedSubsurface {
+impl<A: IcedAppData> BaseTrait for IcedSubsurface<A> {
     fn get_object_id(&self) -> wayland_backend::client::ObjectId {
         self.wl_surface.id()
     }
 }
 
-impl SubsurfaceContainer for IcedSubsurface {
+impl<A: IcedAppData> SubsurfaceContainer for IcedSubsurface<A> {
     fn configure(&mut self, width: u32, height: u32) {
         self.wl_surface.set_buffer_scale(self.surface.scale_factor);
         self.surface.configure(width, height);

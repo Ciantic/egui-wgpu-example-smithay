@@ -28,7 +28,7 @@ pub struct WaylandToIcedInput {
     screen_height: u32,
     start_time: Instant,
     clipboard: Clipboard,
-    last_key_utf8: Option<String>,
+    last_key_utf8: Option<SmolStr>,
 }
 
 impl WaylandToIcedInput {
@@ -135,8 +135,15 @@ impl WaylandToIcedInput {
 
     pub fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, is_repeat: bool) {
         let (key, location) = keysym_to_iced_key_and_loc(event.keysym);
-        let text = event.utf8.clone().map(SmolStr::new);
         let physical_key = keysym_to_physical_key(event.keysym, event.raw_code);
+
+        // For text input, use the current event's UTF-8 if available,
+        // otherwise reuse the last UTF-8 for repeat events
+        let mut text = event.utf8.as_ref().map(|s| SmolStr::new(s.as_str()));
+        if is_repeat && text.is_none() {
+            text = self.last_key_utf8.clone();
+        }
+
         trace!(
             "[INPUT] Keyboard event: pressed={:?}, repeat={:?}, key={:?}, location={:?}, \
              text={:?}, modifiers={:?}, physical_key={:?}",
@@ -149,7 +156,7 @@ impl WaylandToIcedInput {
                     key: key.clone(),
                     location,
                     modifiers: self.modifiers,
-                    text,
+                    text: text.clone(),
                     modified_key: key,
                     physical_key,
                     repeat: is_repeat,
@@ -163,6 +170,11 @@ impl WaylandToIcedInput {
                     physical_key,
                     modified_key: key,
                 }));
+        }
+
+        // Cache the UTF-8 text for use in repeat events
+        if event.utf8.is_some() {
+            self.last_key_utf8 = event.utf8.as_ref().map(|s| SmolStr::new(s.as_str()));
         }
     }
 

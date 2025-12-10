@@ -134,20 +134,14 @@ impl WaylandToIcedInput {
     }
 
     pub fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, is_repeat: bool) {
-        trace!(
-            "[INPUT] Keyboard event - keysym: {:?}, raw_code: {}, pressed: {}, repeat: {}, utf8: \
-             {:?}, modifiers: {:?}",
-            event.keysym.raw(),
-            event.raw_code,
-            pressed,
-            is_repeat,
-            event.utf8,
-            self.modifiers
-        );
-
         let (key, location) = keysym_to_iced_key_and_loc(event.keysym);
         let text = event.utf8.clone().map(SmolStr::new);
         let physical_key = keysym_to_physical_key(event.keysym, event.raw_code);
+        trace!(
+            "[INPUT] Keyboard event: pressed={:?}, repeat={:?}, key={:?}, location={:?}, \
+             text={:?}, modifiers={:?}, physical_key={:?}",
+            pressed, is_repeat, key, location, text, self.modifiers, physical_key
+        );
 
         if pressed {
             self.events

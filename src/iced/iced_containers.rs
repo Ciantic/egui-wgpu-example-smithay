@@ -156,25 +156,23 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
         self.render();
     }
 
-    fn handle_pointer_event(&mut self, _event: &PointerEvent) {
-        // WaylandToIcedInput doesn't have handle_pointer_event, need to add it
-        // For now, just trigger re-render
+    fn handle_pointer_event(&mut self, event: &PointerEvent) {
+        self.input_state.handle_pointer_event(event);
         self.render();
     }
 
     fn handle_keyboard_enter(&mut self) {
-        let _ = self.input_state.handle_keyboard_enter();
+        self.input_state.handle_keyboard_enter();
         self.render();
     }
 
     fn handle_keyboard_leave(&mut self) {
-        let _ = self.input_state.handle_keyboard_leave();
+        self.input_state.handle_keyboard_leave();
         self.render();
     }
 
     fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, repeat: bool) {
-        let _ = self
-            .input_state
+        self.input_state
             .handle_keyboard_event(event, pressed, repeat);
         self.render();
     }
@@ -214,29 +212,61 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
             self.physical_scale() as f32,
         );
 
-        // Get the view element from the app
-        let element = self.iced_app.view();
-
         // Build user interface
         let mut user_interface = user_interface::UserInterface::build(
-            element,
+            self.iced_app.view(),
             viewport.logical_size(),
             std::mem::take(&mut self.cache),
             &mut self.renderer,
         );
 
-        // Draw the user interface
-        user_interface.draw(
+        // Process input events and update the UI state
+        let events = self.input_state.take_events();
+        let cursor = mouse::Cursor::Available(iced::Point::new(
+            self.input_state.get_pointer_position().0 as f32,
+            self.input_state.get_pointer_position().1 as f32,
+        ));
+
+        // Update user interface with events
+        let mut messages = Vec::new();
+        let _ = user_interface.update(
+            &events,
+            cursor,
             &mut self.renderer,
-            &Theme::Dark,
-            &Style {
-                text_color: Color::WHITE,
-            },
-            mouse::Cursor::Unavailable,
+            &mut iced_core::clipboard::Null,
+            &mut messages,
         );
 
-        // Store cache for next frame
+        // Store cache before processing messages
         self.cache = user_interface.into_cache();
+
+        // Process application messages
+        for message in messages {
+            self.iced_app.update(message);
+        }
+
+        // Rebuild UI if there were messages
+        if !events.is_empty() {
+            let mut user_interface = user_interface::UserInterface::build(
+                self.iced_app.view(),
+                viewport.logical_size(),
+                std::mem::take(&mut self.cache),
+                &mut self.renderer,
+            );
+
+            // Draw the user interface with proper cursor state
+            user_interface.draw(
+                &mut self.renderer,
+                &Theme::Dark,
+                &Style {
+                    text_color: Color::WHITE,
+                },
+                cursor,
+            );
+
+            // Store cache for next frame
+            self.cache = user_interface.into_cache();
+        }
 
         // Present the rendered frame - need to extract wgpu renderer
         if let iced_renderer::Renderer::Primary(wgpu_renderer) = &mut self.renderer {

@@ -1,3 +1,4 @@
+use iced::Point;
 use iced::event::Event as IcedEvent;
 use iced::keyboard::Key;
 use iced::keyboard::Location;
@@ -5,10 +6,14 @@ use iced::keyboard::Modifiers as IcedModifiers;
 use iced::keyboard::key::Named;
 use iced::keyboard::key::NativeCode;
 use iced::keyboard::key::Physical;
+use iced::mouse::Button as IcedMouseButton;
+use iced::mouse::ScrollDelta;
 use log::trace;
 use smithay_client_toolkit::seat::keyboard::KeyEvent;
 use smithay_client_toolkit::seat::keyboard::Keysym;
 use smithay_client_toolkit::seat::keyboard::Modifiers as WaylandModifiers;
+use smithay_client_toolkit::seat::pointer::PointerEvent;
+use smithay_client_toolkit::seat::pointer::PointerEventKind;
 use smithay_clipboard::Clipboard;
 use smol_str::SmolStr;
 use std::time::Instant;
@@ -17,6 +22,7 @@ use std::time::Instant;
 pub struct WaylandToIcedInput {
     modifiers: IcedModifiers,
     pointer_pos: (f64, f64),
+    events: Vec<IcedEvent>,
     screen_width: u32,
     screen_height: u32,
     start_time: Instant,
@@ -29,6 +35,7 @@ impl WaylandToIcedInput {
         Self {
             modifiers: IcedModifiers::default(),
             pointer_pos: (0.0, 0.0),
+            events: Vec::new(),
             screen_width: 256,
             screen_height: 256,
             start_time: Instant::now(),
@@ -46,25 +53,86 @@ impl WaylandToIcedInput {
         self.pointer_pos = (x, y);
     }
 
-    pub fn handle_keyboard_enter(&mut self) -> Option<IcedEvent> {
+    pub fn handle_pointer_event(&mut self, event: &PointerEvent) {
+        trace!("[INPUT] Pointer event: {:?}", event.kind);
+        match &event.kind {
+            PointerEventKind::Enter { .. } => {
+                trace!("[INPUT] Pointer entered surface");
+                let (x, y) = event.position;
+                self.pointer_pos = (x, y);
+                self.events
+                    .push(IcedEvent::Mouse(iced::mouse::Event::CursorEntered));
+            }
+            PointerEventKind::Leave { .. } => {
+                trace!("[INPUT] Pointer left surface");
+                self.events
+                    .push(IcedEvent::Mouse(iced::mouse::Event::CursorLeft));
+            }
+            PointerEventKind::Motion { .. } => {
+                let (x, y) = event.position;
+                self.pointer_pos = (x, y);
+                trace!("[INPUT] Pointer moved to: ({}, {})", x, y);
+                self.events
+                    .push(IcedEvent::Mouse(iced::mouse::Event::CursorMoved {
+                        position: Point::new(x as f32, y as f32),
+                    }));
+            }
+            PointerEventKind::Press { button, .. } => {
+                trace!("[INPUT] Pointer button pressed: {}", button);
+                if let Some(iced_button) = wayland_button_to_iced(*button) {
+                    trace!("[INPUT] Mapped to Iced button: {:?}", iced_button);
+                    self.events
+                        .push(IcedEvent::Mouse(iced::mouse::Event::ButtonPressed(
+                            iced_button,
+                        )));
+                }
+            }
+            PointerEventKind::Release { button, .. } => {
+                trace!("[INPUT] Pointer button released: {}", button);
+                if let Some(iced_button) = wayland_button_to_iced(*button) {
+                    self.events
+                        .push(IcedEvent::Mouse(iced::mouse::Event::ButtonReleased(
+                            iced_button,
+                        )));
+                }
+            }
+            PointerEventKind::Axis {
+                horizontal,
+                vertical,
+                ..
+            } => {
+                // Handle scroll events
+                let scroll_delta = ScrollDelta::Lines {
+                    x: horizontal.discrete as f32,
+                    y: vertical.discrete as f32,
+                };
+
+                if horizontal.discrete != 0 || vertical.discrete != 0 {
+                    self.events
+                        .push(IcedEvent::Mouse(iced::mouse::Event::WheelScrolled {
+                            delta: scroll_delta,
+                        }));
+                }
+            }
+        }
+    }
+
+    pub fn take_events(&mut self) -> Vec<IcedEvent> {
+        std::mem::take(&mut self.events)
+    }
+
+    pub fn handle_keyboard_enter(&mut self) {
         trace!("[INPUT] Keyboard focus entered surface");
         // Iced doesn't have a direct WindowFocused event in the same way
         // This might be handled differently depending on the application needs
-        None
     }
 
-    pub fn handle_keyboard_leave(&mut self) -> Option<IcedEvent> {
+    pub fn handle_keyboard_leave(&mut self) {
         trace!("[INPUT] Keyboard focus left surface");
         // Similar to above
-        None
     }
 
-    pub fn handle_keyboard_event(
-        &mut self,
-        event: &KeyEvent,
-        pressed: bool,
-        is_repeat: bool,
-    ) -> Option<IcedEvent> {
+    pub fn handle_keyboard_event(&mut self, event: &KeyEvent, pressed: bool, is_repeat: bool) {
         trace!(
             "[INPUT] Keyboard event - keysym: {:?}, raw_code: {}, pressed: {}, repeat: {}, utf8: \
              {:?}",
@@ -79,37 +147,43 @@ impl WaylandToIcedInput {
         if pressed && !is_repeat && self.modifiers.contains(IcedModifiers::CTRL) {
             match event.keysym {
                 Keysym::c => {
-                    return Some(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
-                        key: Key::Named(Named::Copy),
-                        location: keysym_location(event.keysym),
-                        modifiers: self.modifiers,
-                        text: None,
-                        modified_key: Key::Named(Named::Copy),
-                        physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
-                        repeat: false,
-                    }));
+                    self.events
+                        .push(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
+                            key: Key::Named(Named::Copy),
+                            location: keysym_location(event.keysym),
+                            modifiers: self.modifiers,
+                            text: None,
+                            modified_key: Key::Named(Named::Copy),
+                            physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
+                            repeat: false,
+                        }));
+                    return;
                 }
                 Keysym::x => {
-                    return Some(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
-                        key: Key::Named(Named::Cut),
-                        location: keysym_location(event.keysym),
-                        modifiers: self.modifiers,
-                        text: None,
-                        modified_key: Key::Named(Named::Cut),
-                        physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
-                        repeat: false,
-                    }));
+                    self.events
+                        .push(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
+                            key: Key::Named(Named::Cut),
+                            location: keysym_location(event.keysym),
+                            modifiers: self.modifiers,
+                            text: None,
+                            modified_key: Key::Named(Named::Cut),
+                            physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
+                            repeat: false,
+                        }));
+                    return;
                 }
                 Keysym::v => {
-                    return Some(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
-                        key: Key::Named(Named::Paste),
-                        location: keysym_location(event.keysym),
-                        modifiers: self.modifiers,
-                        text: None,
-                        modified_key: Key::Named(Named::Paste),
-                        physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
-                        repeat: false,
-                    }));
+                    self.events
+                        .push(IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
+                            key: Key::Named(Named::Paste),
+                            location: keysym_location(event.keysym),
+                            modifiers: self.modifiers,
+                            text: None,
+                            modified_key: Key::Named(Named::Paste),
+                            physical_key: Physical::Unidentified(NativeCode::Xkb(event.raw_code)),
+                            repeat: false,
+                        }));
+                    return;
                 }
                 _ => (),
             }
@@ -149,7 +223,7 @@ impl WaylandToIcedInput {
             // Convert text from String to SmolStr if available
             let text_field = text.as_ref().map(|s| SmolStr::from(s.clone()));
 
-            let event = if pressed {
+            let iced_event = if pressed {
                 IcedEvent::Keyboard(iced::keyboard::Event::KeyPressed {
                     key: key.clone(),
                     location,
@@ -169,10 +243,8 @@ impl WaylandToIcedInput {
                 })
             };
 
-            return Some(event);
+            self.events.push(iced_event);
         }
-
-        None
     }
 
     pub fn update_modifiers(&mut self, wayland_mods: &WaylandModifiers) {
@@ -490,4 +562,17 @@ pub fn keysym_to_iced_key_and_loc(keysym: Keysym) -> (Key, Location) {
     let key = keysym_to_iced_key(keysym);
     let location = keysym_location(keysym);
     (key, location)
+}
+
+fn wayland_button_to_iced(button: u32) -> Option<IcedMouseButton> {
+    // Linux button codes (from linux/input-event-codes.h)
+    // BTN_LEFT = 0x110 = 272
+    // BTN_RIGHT = 0x111 = 273
+    // BTN_MIDDLE = 0x112 = 274
+    match button {
+        0x110 => Some(IcedMouseButton::Left),
+        0x111 => Some(IcedMouseButton::Right),
+        0x112 => Some(IcedMouseButton::Middle),
+        _ => None,
+    }
 }

@@ -280,10 +280,12 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
 
         surface_texture.present();
 
-        // Request next frame
-        self.wl_surface
-            .frame(&self.queue_handle, self.wl_surface.clone());
-        self.wl_surface.commit();
+        // Request next frame only if there were input events
+        if !events.is_empty() {
+            self.wl_surface
+                .frame(&self.queue_handle, self.wl_surface.clone());
+            self.wl_surface.commit();
+        }
     }
 
     fn reconfigure_surface(&mut self) {

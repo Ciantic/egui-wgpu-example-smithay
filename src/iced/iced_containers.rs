@@ -221,6 +221,7 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
 
         // Process input events
         let mut events = self.input_state.take_events();
+        let had_input_events = !events.is_empty();
 
         // Add RedrawRequested event so widgets can update their status
         // This is critical - without it, buttons remain in Status::Disabled (grayed
@@ -328,7 +329,7 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
         surface_texture.present();
 
         // Request next frame only if there were input events
-        if !events.is_empty() {
+        if had_input_events {
             self.wl_surface
                 .frame(&self.queue_handle, self.wl_surface.clone());
             self.wl_surface.commit();

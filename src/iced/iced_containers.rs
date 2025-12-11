@@ -232,7 +232,7 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
 
         // Update user interface with events
         let mut messages = Vec::new();
-        let (state, _) = user_interface.update(
+        let (ui_state, _) = user_interface.update(
             &events,
             cursor,
             &mut self.renderer,
@@ -241,14 +241,18 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
         );
 
         // Update mouse interaction based on UI state
-        if let user_interface::State::Updated {
-            mouse_interaction, ..
-        } = state
-        {
-            if self.mouse_interaction != mouse_interaction {
-                self.mouse_interaction = mouse_interaction;
-                get_app().set_cursor(iced_to_cursor_shape(mouse_interaction));
-                trace!("Mouse interaction changed to: {:?}", mouse_interaction);
+        match ui_state {
+            user_interface::State::Updated {
+                mouse_interaction, ..
+            } => {
+                if self.mouse_interaction != mouse_interaction {
+                    self.mouse_interaction = mouse_interaction;
+                    get_app().set_cursor(iced_to_cursor_shape(mouse_interaction));
+                    trace!("Mouse interaction changed to: {:?}", mouse_interaction);
+                }
+            }
+            user_interface::State::Outdated => {
+                // TODO: What?
             }
         }
 
@@ -272,9 +276,9 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
             // Draw the user interface with proper cursor state
             user_interface.draw(
                 &mut self.renderer,
-                &Theme::Dark,
+                &Theme::Light,
                 &Style {
-                    text_color: Color::WHITE,
+                    text_color: Color::BLACK,
                 },
                 cursor,
             );
@@ -286,7 +290,7 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
         // Present the rendered frame - need to extract wgpu renderer
         if let iced_renderer::Renderer::Primary(wgpu_renderer) = &mut self.renderer {
             wgpu_renderer.present(
-                Some(Color::BLACK),
+                Some(Color::WHITE),
                 self.output_format,
                 &texture_view,
                 &viewport,

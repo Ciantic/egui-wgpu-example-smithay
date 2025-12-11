@@ -54,8 +54,8 @@ struct IcedSurfaceState<A: IcedAppData> {
     wl_surface: WlSurface,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
-    queue: wgpu::Queue,
-    engine: Engine,
+    _queue: wgpu::Queue,
+    _engine: Engine,
     renderer: Renderer,
     input_state: WaylandToIcedInput,
     iced_app: A,
@@ -131,8 +131,8 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
             wl_surface,
             surface,
             device,
-            queue,
-            engine,
+            _queue: queue,
+            _engine: engine,
             renderer,
             input_state,
             iced_app,
@@ -202,40 +202,65 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
 
     fn render(&mut self) {
         trace!("Rendering surface {}", self.wl_surface.id());
+
         let surface_texture = self
             .surface
             .get_current_texture()
             .expect("Failed to acquire next surface texture");
-
         let texture_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Create viewport
+        let viewport = self.create_viewport();
+        let (events, had_input_events) = self.collect_events();
+        let cursor = self.get_cursor_position();
+
+        // Update: Process events and messages, then draw
+        self.update_and_draw(&viewport, events, cursor);
+
+        // Present the rendered frame
+        self.present_frame(&viewport, &texture_view, surface_texture);
+
+        if had_input_events {
+            self.request_next_frame();
+        }
+    }
+
+    fn create_viewport(&self) -> Viewport {
         let physical_width = self.width.saturating_mul(self.physical_scale());
         let physical_height = self.height.saturating_mul(self.physical_scale());
-        let viewport = Viewport::with_physical_size(
+        Viewport::with_physical_size(
             Size::new(physical_width, physical_height),
             self.physical_scale() as f32,
-        );
+        )
+    }
 
-        // Process input events
+    fn collect_events(&mut self) -> (Vec<iced_core::Event>, bool) {
         let mut events = self.input_state.take_events();
         let had_input_events = !events.is_empty();
 
         // Add RedrawRequested event so widgets can update their status
-        // This is critical - without it, buttons remain in Status::Disabled (grayed
-        // out)
         events.push(iced_core::Event::Window(
             iced_core::window::Event::RedrawRequested(std::time::Instant::now()),
         ));
 
-        let cursor = mouse::Cursor::Available(iced::Point::new(
+        (events, had_input_events)
+    }
+
+    fn get_cursor_position(&self) -> mouse::Cursor {
+        mouse::Cursor::Available(iced::Point::new(
             self.input_state.get_pointer_position().0 as f32,
             self.input_state.get_pointer_position().1 as f32,
-        ));
+        ))
+    }
 
-        // Build user interface
+    fn update_and_draw(
+        &mut self,
+        viewport: &Viewport,
+        events: Vec<iced_core::Event>,
+        cursor: mouse::Cursor,
+    ) {
+        // Build user interface (View)
         let mut user_interface = user_interface::UserInterface::build(
             self.iced_app.view(),
             viewport.logical_size(),
@@ -243,7 +268,7 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
             &mut self.renderer,
         );
 
-        // Update user interface with events
+        // Update with events and collect messages
         let mut messages = Vec::new();
         let (ui_state, _) = user_interface.update(
             &events,
@@ -254,28 +279,22 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
         );
 
         // Update mouse interaction based on UI state
-        match ui_state {
-            user_interface::State::Updated {
-                mouse_interaction, ..
-            } => {
-                if self.mouse_interaction != mouse_interaction {
-                    self.mouse_interaction = mouse_interaction;
-                    get_app().set_cursor(iced_to_cursor_shape(mouse_interaction));
-                    trace!("Mouse interaction changed to: {:?}", mouse_interaction);
-                }
-            }
-            user_interface::State::Outdated => {
-                // UI state is outdated, will be rebuilt next frame
+        if let user_interface::State::Updated {
+            mouse_interaction, ..
+        } = ui_state
+        {
+            if self.mouse_interaction != mouse_interaction {
+                self.mouse_interaction = mouse_interaction;
+                get_app().set_cursor(iced_to_cursor_shape(mouse_interaction));
+                trace!("Mouse interaction changed to: {:?}", mouse_interaction);
             }
         }
 
-        // Check if we need to rebuild due to messages
+        // If we have messages, we need to update state and rebuild
         let has_messages = !messages.is_empty();
 
-        // Draw the current UI state (before processing messages)
         if !has_messages {
-            // No messages - draw the UI that was updated with events (hover states
-            // preserved)
+            // No state changes - draw the UI with event-updated widget states
             user_interface.draw(
                 &mut self.renderer,
                 &Theme::Light,
@@ -286,15 +305,14 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
             );
             self.cache = user_interface.into_cache();
         } else {
-            // Store cache from current UI
+            // Store cache and update app state with messages
             self.cache = user_interface.into_cache();
 
-            // Process messages and update app state
-            for message in messages {
-                self.iced_app.update(message);
+            for message in &messages {
+                self.iced_app.update(message.clone());
             }
 
-            // Rebuild UI with updated state
+            // Rebuild UI with updated app state
             let mut user_interface = user_interface::UserInterface::build(
                 self.iced_app.view(),
                 viewport.logical_size(),
@@ -311,29 +329,31 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
                 },
                 cursor,
             );
-
-            // Store cache for next frame
             self.cache = user_interface.into_cache();
         }
+    }
 
-        // Present the rendered frame - need to extract wgpu renderer
+    fn present_frame(
+        &mut self,
+        viewport: &Viewport,
+        texture_view: &wgpu::TextureView,
+        surface_texture: wgpu::SurfaceTexture,
+    ) {
         if let iced_renderer::Renderer::Primary(wgpu_renderer) = &mut self.renderer {
             wgpu_renderer.present(
                 Some(Color::WHITE),
                 self.output_format,
-                &texture_view,
-                &viewport,
+                texture_view,
+                viewport,
             );
         }
-
         surface_texture.present();
+    }
 
-        // Request next frame only if there were input events
-        if had_input_events {
-            self.wl_surface
-                .frame(&self.queue_handle, self.wl_surface.clone());
-            self.wl_surface.commit();
-        }
+    fn request_next_frame(&self) {
+        self.wl_surface
+            .frame(&self.queue_handle, self.wl_surface.clone());
+        self.wl_surface.commit();
     }
 
     fn reconfigure_surface(&mut self) {

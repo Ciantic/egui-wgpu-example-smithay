@@ -642,6 +642,13 @@ fn iced_to_cursor_shape(interaction: mouse::Interaction) -> Shape {
         Interaction::Wait => Shape::Wait,
         Interaction::ResizingHorizontally => Shape::EwResize,
         Interaction::ResizingVertically => Shape::NsResize,
-        _ => Shape::Default,
+        Interaction::Hidden => {
+            // TODO: This is not a cursor, it's request to hide it
+            Shape::Default
+        }
+        Interaction::ResizingDiagonallyUp => Shape::NeswResize,
+        Interaction::ResizingDiagonallyDown => Shape::NwseResize,
+        Interaction::ResizingColumn => Shape::ColResize,
+        Interaction::ResizingRow => Shape::RowResize,
     }
 }

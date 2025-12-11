@@ -646,6 +646,7 @@ fn iced_to_cursor_shape(interaction: mouse::Interaction) -> Shape {
             // TODO: This is not a cursor, it's request to hide it
             Shape::Default
         }
+        // What is ResizingDiagonallyUp and ResizingDiagonallyDown?
         Interaction::ResizingDiagonallyUp => Shape::NeswResize,
         Interaction::ResizingDiagonallyDown => Shape::NwseResize,
         Interaction::ResizingColumn => Shape::ColResize,

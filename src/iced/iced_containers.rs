@@ -44,7 +44,7 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::Shape;
 
 pub trait IcedAppData {
-    type Message: std::fmt::Debug + Clone + Send;
+    type Message: std::fmt::Debug + Clone + Send + 'static;
 
     fn view(&'_ self) -> iced::Element<'_, Self::Message>;
     fn update(&mut self, message: Self::Message);
@@ -153,6 +153,10 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
         self.input_state.set_screen_size(self.width, self.height);
         self.reconfigure_surface();
         self.render();
+        // Request initial frame callback to start rendering loop
+        // self.wl_surface
+        //     .frame(&self.queue_handle, self.wl_surface.clone());
+        // self.wl_surface.commit();
     }
 
     fn frame(&mut self, _time: u32) {
@@ -215,6 +219,21 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
             self.physical_scale() as f32,
         );
 
+        // Process input events
+        let mut events = self.input_state.take_events();
+
+        // Add RedrawRequested event so widgets can update their status
+        // This is critical - without it, buttons remain in Status::Disabled (grayed
+        // out)
+        events.push(iced_core::Event::Window(
+            iced_core::window::Event::RedrawRequested(std::time::Instant::now()),
+        ));
+
+        let cursor = mouse::Cursor::Available(iced::Point::new(
+            self.input_state.get_pointer_position().0 as f32,
+            self.input_state.get_pointer_position().1 as f32,
+        ));
+
         // Build user interface
         let mut user_interface = user_interface::UserInterface::build(
             self.iced_app.view(),
@@ -222,13 +241,6 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
             std::mem::take(&mut self.cache),
             &mut self.renderer,
         );
-
-        // Process input events and update the UI state
-        let events = self.input_state.take_events();
-        let cursor = mouse::Cursor::Available(iced::Point::new(
-            self.input_state.get_pointer_position().0 as f32,
-            self.input_state.get_pointer_position().1 as f32,
-        ));
 
         // Update user interface with events
         let mut messages = Vec::new();
@@ -252,20 +264,36 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
                 }
             }
             user_interface::State::Outdated => {
-                // TODO: What?
+                // UI state is outdated, will be rebuilt next frame
             }
         }
 
-        // Store cache before processing messages
-        self.cache = user_interface.into_cache();
+        // Check if we need to rebuild due to messages
+        let has_messages = !messages.is_empty();
 
-        // Process application messages
-        for message in messages {
-            self.iced_app.update(message);
-        }
+        // Draw the current UI state (before processing messages)
+        if !has_messages {
+            // No messages - draw the UI that was updated with events (hover states
+            // preserved)
+            user_interface.draw(
+                &mut self.renderer,
+                &Theme::Light,
+                &Style {
+                    text_color: Color::BLACK,
+                },
+                cursor,
+            );
+            self.cache = user_interface.into_cache();
+        } else {
+            // Store cache from current UI
+            self.cache = user_interface.into_cache();
 
-        // Rebuild UI if there were messages
-        if !events.is_empty() {
+            // Process messages and update app state
+            for message in messages {
+                self.iced_app.update(message);
+            }
+
+            // Rebuild UI with updated state
             let mut user_interface = user_interface::UserInterface::build(
                 self.iced_app.view(),
                 viewport.logical_size(),
@@ -273,7 +301,7 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
                 &mut self.renderer,
             );
 
-            // Draw the user interface with proper cursor state
+            // Draw the rebuilt UI
             user_interface.draw(
                 &mut self.renderer,
                 &Theme::Light,

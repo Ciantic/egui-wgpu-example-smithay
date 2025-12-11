@@ -41,6 +41,7 @@ use std::ptr::NonNull;
 use wayland_client::Proxy;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface::WlSurface;
+use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::Shape;
 
 pub trait IcedAppData {
     type Message: std::fmt::Debug + Clone + Send;
@@ -65,6 +66,7 @@ struct IcedSurfaceState<A: IcedAppData> {
     surface_config: Option<wgpu::SurfaceConfiguration>,
     output_format: wgpu::TextureFormat,
     cache: user_interface::Cache,
+    mouse_interaction: mouse::Interaction,
 }
 
 impl<A: IcedAppData> IcedSurfaceState<A> {
@@ -141,6 +143,7 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
             surface_config: None,
             output_format,
             cache: user_interface::Cache::default(),
+            mouse_interaction: mouse::Interaction::default(),
         }
     }
 
@@ -229,13 +232,25 @@ impl<A: IcedAppData> IcedSurfaceState<A> {
 
         // Update user interface with events
         let mut messages = Vec::new();
-        let _ = user_interface.update(
+        let (state, _) = user_interface.update(
             &events,
             cursor,
             &mut self.renderer,
             &mut iced_core::clipboard::Null,
             &mut messages,
         );
+
+        // Update mouse interaction based on UI state
+        if let user_interface::State::Updated {
+            mouse_interaction, ..
+        } = state
+        {
+            if self.mouse_interaction != mouse_interaction {
+                self.mouse_interaction = mouse_interaction;
+                get_app().set_cursor(iced_to_cursor_shape(mouse_interaction));
+                trace!("Mouse interaction changed to: {:?}", mouse_interaction);
+            }
+        }
 
         // Store cache before processing messages
         self.cache = user_interface.into_cache();
@@ -600,5 +615,33 @@ impl<A: IcedAppData> SubsurfaceContainer for IcedSubsurface<A> {
     fn configure(&mut self, width: u32, height: u32) {
         self.wl_surface.set_buffer_scale(self.surface.scale_factor);
         self.surface.configure(width, height);
+    }
+}
+
+fn iced_to_cursor_shape(interaction: mouse::Interaction) -> Shape {
+    use mouse::Interaction;
+    match interaction {
+        Interaction::Idle | Interaction::None => Shape::Default,
+        Interaction::Pointer => Shape::Pointer,
+        Interaction::Grab => Shape::Grab,
+        Interaction::Grabbing => Shape::Grabbing,
+        Interaction::Crosshair => Shape::Crosshair,
+        Interaction::Text => Shape::Text,
+        Interaction::NotAllowed => Shape::NotAllowed,
+        Interaction::ZoomIn => Shape::ZoomIn,
+        Interaction::ZoomOut => Shape::ZoomOut,
+        Interaction::Cell => Shape::Cell,
+        Interaction::Move => Shape::Move,
+        Interaction::Copy => Shape::Copy,
+        Interaction::NoDrop => Shape::NoDrop,
+        Interaction::Alias => Shape::Alias,
+        Interaction::ContextMenu => Shape::ContextMenu,
+        Interaction::Help => Shape::Help,
+        Interaction::AllScroll => Shape::AllScroll,
+        Interaction::Progress => Shape::Progress,
+        Interaction::Wait => Shape::Wait,
+        Interaction::ResizingHorizontally => Shape::EwResize,
+        Interaction::ResizingVertically => Shape::NsResize,
+        _ => Shape::Default,
     }
 }
